@@ -1,5 +1,7 @@
+using AppointmentScheduler.Application.Events.Cancel;
 using AppointmentScheduler.Application.Events.Create;
 using AppointmentScheduler.Application.Events.List;
+using AppointmentScheduler.Application.Events.Update;
 using AppointmentScheduler.Infrastructure;
 using AppointmentScheduler.Infrastructure.Persistence;
 using Microsoft.EntityFrameworkCore;
@@ -10,6 +12,8 @@ builder.Services.AddControllers();
 builder.Services.AddOpenApi();
 builder.Services.AddScoped<CreateEventHandler>();
 builder.Services.AddScoped<ListEventsHandler>();
+builder.Services.AddScoped<UpdateEventHandler>();
+builder.Services.AddScoped<CancelEventHandler>();
 builder.Services.AddInfrastructure(
     builder.Configuration.GetConnectionString("SchedulerDatabase")
     ?? "Data Source=appointment-scheduler.db");

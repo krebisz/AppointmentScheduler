@@ -40,14 +40,21 @@ GET /api/events returns events ordered by UTC start time. Optional query paramet
 - from: includes events whose end time is on or after this timestamp.
 - to: includes events whose start time is on or before this timestamp.
 - search: case-insensitive title or description search.
+- includeCancelled: includes soft-cancelled events when true; defaults to false.
 
 The date filters therefore use inclusive overlap semantics. An inverted date range returns HTTP 400.
+
+## Update and cancel
+
+- PUT /api/events/{id} fully replaces the event details and attendee collection and returns HTTP 200.
+- DELETE /api/events/{id} soft-cancels the event and returns HTTP 204. Repeating the cancellation is idempotent.
+- Missing events return HTTP 404. Cancelled events cannot be updated.
 
 ## Tests
 
     dotnet test AppointmentScheduler.slnx
 
-Last verified: 8 passed, 0 failed, 0 skipped.
+Last verified: 14 passed, 0 failed, 0 skipped.
 
 ## API contract
 
@@ -60,4 +67,4 @@ In Development, the OpenAPI 3.1.1 document is available at /openapi/v1.json. It 
 - Infrastructure implements that port using EF Core 10.0.12 and SQLite.
 - The root API project owns HTTP contracts, controllers, and dependency injection.
 - Database creation currently uses EnsureCreated rather than migrations.
-- Update, cancel/delete, notifications, accept/reject, and concurrency handling are not implemented yet.
+- Notifications, accept/reject, and concurrency handling are not implemented yet.

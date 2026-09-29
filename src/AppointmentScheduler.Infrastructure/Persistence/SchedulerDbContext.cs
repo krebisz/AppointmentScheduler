@@ -32,6 +32,8 @@ public sealed class SchedulerDbContext(DbContextOptions<SchedulerDbContext> opti
         eventBuilder.Property(calendarEvent => calendarEvent.EndTime)
             .HasConversion(utcTicksConverter)
             .IsRequired();
+        eventBuilder.Property(calendarEvent => calendarEvent.IsCancelled)
+            .IsRequired();
 
         eventBuilder.OwnsMany(
             calendarEvent => calendarEvent.Attendees,

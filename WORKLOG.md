@@ -7,10 +7,10 @@ Keep this a short live dashboard. Replace stale entries; report only verified ou
 - Remaining budget: approximately 2 hours 30 minutes
 - Implementation budget: approximately 2 hours, preserving the final 30 minutes for handover
 - Environment/setup time lost: approximately 45 minutes to sandbox failures, Google Drive file locking/path issues, relocation, and repository realignment
-- Last verified: 2026-09-29 11:51 +02:00
+- Last verified: 2026-09-29 12:00 +02:00
 - Handover reserve: final 30 minutes
-- Current slice: list/filter/search from HTTP through application into SQLite - verified
-- Next action: update and soft-cancel event lifecycle
+- Current slice: update and soft-cancel event lifecycle - verified
+- Next action: minimal observable notifications
 
 ## Coverage
 
@@ -20,12 +20,12 @@ Keep this a short live dashboard. Replace stale entries; report only verified ou
 | --- | --- | --- | --- |
 | Must | Event and attendee fields; size limits | Verified | Domain and API enforce title 200, description 2,000, attendee name 200, email 320; Event owns Attendees. |
 | Must | Create event | Verified | POST /api/events returned HTTP 201 and persisted Event/Attendee rows to SQLite. |
-| Must | Update event | Not started | |
-| Must | Delete/cancel event | Not started | |
+| Must | Update event | Verified | PUT /api/events/{id} replaces event details and attendees; missing returns 404 and cancelled events reject updates. |
+| Must | Delete/cancel event | Verified | DELETE /api/events/{id} soft-cancels idempotently; cancelled events are excluded from lists unless includeCancelled=true. |
 | Must | List with filters | Verified | GET /api/events supports inclusive overlap filters using from/to and returns UTC start-time order. |
 | Must | Search events | Verified | The same endpoint supports case-insensitive title/description search, combinable with date filters. |
 | Must | Notification capability | Not started | |
-| Must | Appropriate tests; runnable solution | Verified | 8 focused tests pass; solution builds with 0 warnings/errors. |
+| Must | Appropriate tests; runnable solution | Verified | 14 focused tests pass; solution builds with 0 warnings/errors. |
 | Explicit design | EF or similar, storage, layering, interfaces, DDD patterns | Verified | Separate Domain, Application, Infrastructure and API projects/boundaries; EF Core SQLite repository implements the application port. |
 | Should | OpenAPI | Verified | Development document returned HTTP 200, OpenAPI 3.1.1, with /api/events. |
 | Should | Generated client | Not started | |
@@ -45,6 +45,7 @@ Keep this a short live dashboard. Replace stale entries; report only verified ou
 | Accept offset-aware timestamps and persist UTC | Avoids local-time ambiguity; end time must be later than start time. |
 | Store normalized UTC timestamp ticks in SQLite | Integer storage makes relational overlap filtering and ordering deterministic across offsets. |
 | Filter by inclusive event overlap; search title/description | An event matches when it overlaps the requested from/to range. Search uses SQLite LIKE semantics and results are ordered by start time then ID. Pagination is deferred for the assessment scope. |
+| Soft cancellation with default query exclusion | DELETE is idempotent and preserves data. Cancelled events remain inspectable through includeCancelled=true and cannot be updated. |
 | Separate Domain, Application, Infrastructure, and API boundaries | Project references enforce Domain <- Application <- Infrastructure, while the API composes Application and Infrastructure. Only the persistence boundary has an interface. |
 | Deliver vertical slices through those boundaries | The create-event slice now compiles, runs, persists and covers its invalid-time failure path. |
 | Implement notification capability after the core event lifecycle, but before Should/Could features | Notifications depend on established event operations and are an infrastructure concern, but remain a Must requirement. |
@@ -93,9 +94,10 @@ Still decide and record: cancellation versus deletion, filter/search semantics, 
 | Command / request | Observed result |
 | --- | --- |
 | dotnet build AppointmentScheduler.slnx | Passed; 0 warnings, 0 errors. |
-| dotnet test AppointmentScheduler.slnx | Passed; 8 passed, 0 failed, 0 skipped. |
+| dotnet test AppointmentScheduler.slnx | Passed; 14 passed, 0 failed, 0 skipped. |
 | POST http://127.0.0.1:5158/api/events | HTTP 201; returned event and attendee IDs; EF logs confirmed inserts to Events and Attendees. |
 | GET /api/events?from=2030-01-01T09:30:00Z&to=2030-01-01T10:30:00Z&search=cardiology | HTTP 200; returned only the overlapping matching event; EF logs confirmed server-side SQLite filtering and ordering. |
+| POST -> PUT -> DELETE twice -> GET lifecycle smoke | HTTP 201, 200, 204, 204; default query returned no cancelled event and includeCancelled=true returned the updated cancelled event. |
 | GET http://127.0.0.1:5158/openapi/v1.json | HTTP 200; OpenAPI 3.1.1 document contains /api/events. |
 
 ## Time and priorities
@@ -111,8 +113,8 @@ Record each checkpoint only after its commit is verified in Git.
 | Phase | Deliverable | Status | Commit |
 | --- | --- | --- | --- |
 | 1 | Create-event vertical slice, persistence, OpenAPI, and focused tests | Complete | 7a0c10b - Commit 1: Event aggregate, attendees, validation, application use case, EF Core/SQLite persistence, controller endpoint, OpenAPI, and focused tests. |
-| 2 | List, filter, and search with SQLite-backed tests | Ready to commit | |
-| 3 | Update and cancel with lifecycle tests | Pending | |
+| 2 | List, filter, and search with SQLite-backed tests | Complete | 4c6bfa9 - Implement event listing filtering and search |
+| 3 | Update and cancel with lifecycle tests | Ready to commit | |
 | 4 | Minimal observable notifications with tests | Pending | |
 | 5 | Must-set stabilization and full smoke verification | Pending | |
 | 6 | Should items, only if the Must set is stable | Conditional | |
@@ -120,9 +122,9 @@ Record each checkpoint only after its commit is verified in Git.
 
 ## Handover
 
-- Implemented and verified: create, list/filter/search, aggregate invariants, relational SQLite persistence, OpenAPI document, focused domain/application/API tests
-- Missing or unverified Must items: update, cancel/delete, notifications
+- Implemented and verified: create, list/filter/search, update, soft cancellation, aggregate invariants, relational SQLite persistence, OpenAPI document, focused domain/application/API tests
+- Missing or unverified Must items: notifications
 - Deferred Should/Could items: generated client, public documentation UI, accept/reject, simultaneous-update handling, availability checks
 - Known limitations: startup uses EnsureCreated rather than migrations; list results are not paginated; validation errors use one event-level domain error key
-- AI assistance: Phase 1 and Phase 2 code/tests/documentation drafted with AI; build, tests, SQLite persistence, HTTP create/query behavior, and OpenAPI output executed locally
-- Git status, final commit, remote/link: Phase 1 committed as 7a0c10b on main and tracks origin/main; Phase 2 changes are verified and ready for checkpoint commit
+- AI assistance: Phase 1-3 code/tests/documentation drafted with AI; build, tests, SQLite persistence, HTTP create/query/update/cancel behavior, and OpenAPI output executed locally
+- Git status, final commit, remote/link: Phase 2 committed as 4c6bfa9 on main and tracks origin/main; Phase 3 changes are verified and ready for checkpoint commit

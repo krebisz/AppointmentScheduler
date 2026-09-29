@@ -46,9 +46,47 @@ public sealed record EventListItemResponse(
     string Description,
     DateTimeOffset StartTime,
     DateTimeOffset EndTime,
+    bool IsCancelled,
     IReadOnlyCollection<EventAttendeeResponse> Attendees);
 
 public sealed record EventAttendeeResponse(
+    Guid Id,
+    string Name,
+    string EmailAddress,
+    bool IsAttending);
+
+public sealed record UpdateEventRequest(
+    [param: Required]
+    [param: StringLength(CalendarEvent.TitleMaxLength)]
+    string Title,
+    [param: Required]
+    [param: StringLength(CalendarEvent.DescriptionMaxLength)]
+    string Description,
+    DateTimeOffset StartTime,
+    DateTimeOffset EndTime,
+    [param: Required]
+    [param: MinLength(1)]
+    IReadOnlyCollection<UpdateAttendeeRequest> Attendees);
+
+public sealed record UpdateAttendeeRequest(
+    [param: Required]
+    [param: StringLength(CalendarEvent.AttendeeNameMaxLength)]
+    string Name,
+    [param: Required]
+    [param: StringLength(CalendarEvent.EmailAddressMaxLength)]
+    [param: EmailAddress]
+    string EmailAddress,
+    bool IsAttending);
+
+public sealed record UpdateEventResponse(
+    Guid Id,
+    string Title,
+    string Description,
+    DateTimeOffset StartTime,
+    DateTimeOffset EndTime,
+    IReadOnlyCollection<UpdatedAttendeeResponse> Attendees);
+
+public sealed record UpdatedAttendeeResponse(
     Guid Id,
     string Name,
     string EmailAddress,

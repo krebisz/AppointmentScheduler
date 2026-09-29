@@ -14,6 +14,17 @@ public sealed class EfEventRepository(SchedulerDbContext dbContext) : IEventRepo
         await dbContext.SaveChangesAsync(cancellationToken);
     }
 
+    public Task<CalendarEvent?> GetByIdAsync(
+        Guid id,
+        CancellationToken cancellationToken)
+    {
+        return dbContext.Events
+            .Include(calendarEvent => calendarEvent.Attendees)
+            .SingleOrDefaultAsync(
+                calendarEvent => calendarEvent.Id == id,
+                cancellationToken);
+    }
+
     public async Task<IReadOnlyList<CalendarEvent>> ListAsync(
         EventQuery query,
         CancellationToken cancellationToken)
@@ -21,6 +32,11 @@ public sealed class EfEventRepository(SchedulerDbContext dbContext) : IEventRepo
         var events = dbContext.Events
             .AsNoTracking()
             .AsQueryable();
+
+        if (!query.IncludeCancelled)
+        {
+            events = events.Where(calendarEvent => !calendarEvent.IsCancelled);
+        }
 
         if (query.From.HasValue)
         {
@@ -46,5 +62,10 @@ public sealed class EfEventRepository(SchedulerDbContext dbContext) : IEventRepo
             .OrderBy(calendarEvent => calendarEvent.StartTime)
             .ThenBy(calendarEvent => calendarEvent.Id)
             .ToListAsync(cancellationToken);
+    }
+
+    public Task SaveChangesAsync(CancellationToken cancellationToken)
+    {
+        return dbContext.SaveChangesAsync(cancellationToken);
     }
 }

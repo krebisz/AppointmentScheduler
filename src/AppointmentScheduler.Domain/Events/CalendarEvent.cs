@@ -41,9 +41,66 @@ public sealed class CalendarEvent
 
     public DateTimeOffset EndTime { get; private set; }
 
+    public bool IsCancelled { get; private set; }
+
     public IReadOnlyCollection<Attendee> Attendees => _attendees;
 
     public static CalendarEvent Create(
+        string title,
+        string description,
+        DateTimeOffset startTime,
+        DateTimeOffset endTime,
+        IEnumerable<AttendeeDetails> attendees)
+    {
+        var details = ValidateDetails(
+            title,
+            description,
+            startTime,
+            endTime,
+            attendees);
+
+        return new CalendarEvent(
+            Guid.NewGuid(),
+            details.Title,
+            details.Description,
+            details.StartTime,
+            details.EndTime,
+            details.Attendees);
+    }
+
+    public void Update(
+        string title,
+        string description,
+        DateTimeOffset startTime,
+        DateTimeOffset endTime,
+        IEnumerable<AttendeeDetails> attendees)
+    {
+        if (IsCancelled)
+        {
+            throw new DomainValidationException("A cancelled event cannot be updated.");
+        }
+
+        var details = ValidateDetails(
+            title,
+            description,
+            startTime,
+            endTime,
+            attendees);
+
+        Title = details.Title;
+        Description = details.Description;
+        StartTime = details.StartTime;
+        EndTime = details.EndTime;
+        _attendees.Clear();
+        _attendees.AddRange(details.Attendees);
+    }
+
+    public void Cancel()
+    {
+        IsCancelled = true;
+    }
+
+    private static ValidatedEventDetails ValidateDetails(
         string title,
         string description,
         DateTimeOffset startTime,
@@ -80,8 +137,7 @@ public sealed class CalendarEvent
             throw new DomainValidationException("Attendee email addresses must be unique.");
         }
 
-        return new CalendarEvent(
-            Guid.NewGuid(),
+        return new ValidatedEventDetails(
             normalizedTitle,
             normalizedDescription,
             utcStart,
@@ -105,6 +161,13 @@ public sealed class CalendarEvent
 
         return normalized;
     }
+
+    private sealed record ValidatedEventDetails(
+        string Title,
+        string Description,
+        DateTimeOffset StartTime,
+        DateTimeOffset EndTime,
+        IReadOnlyCollection<Attendee> Attendees);
 }
 
 public sealed class Attendee

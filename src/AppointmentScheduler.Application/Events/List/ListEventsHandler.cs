@@ -20,7 +20,8 @@ public sealed class ListEventsHandler(IEventRepository eventRepository)
             new EventQuery(
                 from,
                 to,
-                string.IsNullOrWhiteSpace(query.Search) ? null : query.Search.Trim()),
+                string.IsNullOrWhiteSpace(query.Search) ? null : query.Search.Trim(),
+                query.IncludeCancelled),
             cancellationToken);
 
         return events
@@ -30,6 +31,7 @@ public sealed class ListEventsHandler(IEventRepository eventRepository)
                 calendarEvent.Description,
                 calendarEvent.StartTime,
                 calendarEvent.EndTime,
+                calendarEvent.IsCancelled,
                 calendarEvent.Attendees
                     .Select(attendee => new ListedAttendeeResult(
                         attendee.Id,
@@ -44,7 +46,8 @@ public sealed class ListEventsHandler(IEventRepository eventRepository)
 public sealed record ListEventsQuery(
     DateTimeOffset? From,
     DateTimeOffset? To,
-    string? Search);
+    string? Search,
+    bool IncludeCancelled);
 
 public sealed record ListedEventResult(
     Guid Id,
@@ -52,6 +55,7 @@ public sealed record ListedEventResult(
     string Description,
     DateTimeOffset StartTime,
     DateTimeOffset EndTime,
+    bool IsCancelled,
     IReadOnlyCollection<ListedAttendeeResult> Attendees);
 
 public sealed record ListedAttendeeResult(
