@@ -1,5 +1,6 @@
 using AppointmentScheduler.Application.Events.Cancel;
 using AppointmentScheduler.Application.Events.Create;
+using AppointmentScheduler.Application.Events.Attendance;
 using AppointmentScheduler.Application.Events.List;
 using AppointmentScheduler.Application.Events.Update;
 using AppointmentScheduler.Infrastructure;
@@ -14,6 +15,7 @@ builder.Services.AddScoped<CreateEventHandler>();
 builder.Services.AddScoped<ListEventsHandler>();
 builder.Services.AddScoped<UpdateEventHandler>();
 builder.Services.AddScoped<CancelEventHandler>();
+builder.Services.AddScoped<SetAttendanceHandler>();
 builder.Services.AddInfrastructure(
     builder.Configuration.GetConnectionString("SchedulerDatabase")
     ?? "Data Source=appointment-scheduler.db");
@@ -23,9 +25,19 @@ var app = builder.Build();
 if (app.Environment.IsDevelopment())
 {
     app.MapOpenApi();
+    app.UseSwaggerUI(options =>
+    {
+        options.SwaggerEndpoint(
+            "/openapi/v1.json",
+            "Appointment Scheduler API v1");
+        options.RoutePrefix = "swagger";
+    });
 }
 
-app.UseHttpsRedirection();
+if (!app.Environment.IsDevelopment())
+{
+    app.UseHttpsRedirection();
+}
 
 app.UseAuthorization();
 

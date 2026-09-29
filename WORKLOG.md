@@ -4,13 +4,12 @@ Keep this a short live dashboard. Replace stale entries; report only verified ou
 
 ## Snapshot
 
-- Remaining budget: approximately 2 hours 30 minutes
-- Implementation budget: approximately 2 hours, preserving the final 30 minutes for handover
+- Remaining budget: not re-estimated after Phase 5; preserve the final 30 minutes for handover
 - Environment/setup time lost: approximately 45 minutes to sandbox failures, Google Drive file locking/path issues, relocation, and repository realignment
-- Last verified: 2026-09-29 12:33 +02:00
+- Last verified: 2026-09-29 13:26 +02:00
 - Handover reserve: final 30 minutes
-- Current slice: minimal observable notifications - verified and ready to commit
-- Next action: Must-set stabilization and final handover verification
+- Current slice: lean Swagger UI, attendance response, and optimistic-concurrency demonstrations - verified by build/tests
+- Next action: final runtime smoke, repository audit, and handover
 
 ## Coverage
 
@@ -25,13 +24,13 @@ Keep this a short live dashboard. Replace stale entries; report only verified ou
 | Must | List with filters | Verified | GET /api/events supports inclusive overlap filters using from/to and returns UTC start-time order. |
 | Must | Search events | Verified | The same endpoint supports case-insensitive title/description search, combinable with date filters. |
 | Must | Notification capability | Verified | Create, update, and first cancellation publish after persistence through an application port; infrastructure emits a simulated structured log without recipient addresses or external delivery. |
-| Must | Appropriate tests; runnable solution | Verified | 18 focused tests pass; solution builds with 0 warnings/errors. |
+| Must | Appropriate tests; runnable solution | Verified | 22 focused tests pass; solution builds with 0 warnings/errors. |
 | Explicit design | EF or similar, storage, layering, interfaces, DDD patterns | Verified | Separate Domain, Application, Infrastructure and API projects/boundaries; EF Core SQLite repository implements the application port. |
 | Should | OpenAPI | Verified | Development document returned HTTP 200, OpenAPI 3.1.1, with /api/events. |
-| Should | Generated client | Not started | |
-| Should | Public-facing generated docs | Not started | |
-| Should | Accept/reject event | Not started | |
-| Could | Same-event simultaneous updates | Not started | |
+| Should | Generated client | Deferred | OpenAPI JSON is available as generation input; generator/tooling and distributed client source were not added because they were disproportionate to the assessment slice. |
+| Should | Public-facing generated docs | Verified, limited | Swagger UI renders the generated OpenAPI document in Development; production hosting is deferred. |
+| Should | Accept/reject event | Verified, limited | PATCH updates one attendee's `isAttending` value; invitation workflow/history is deferred. |
+| Could | Same-event simultaneous updates | Verified, limited | Numeric optimistic version rejects stale requests with 409 and EF rejects racing saves; retries, merge, ETags, and audit history are deferred. |
 | Could | Attendee availability or other advanced features | Not started | |
 
 ## Assumptions and material choices
@@ -49,8 +48,10 @@ Keep this a short live dashboard. Replace stale entries; report only verified ou
 | Separate Domain, Application, Infrastructure, and API boundaries | Project references enforce Domain <- Application <- Infrastructure, while the API composes Application and Infrastructure. Only the persistence boundary has an interface. |
 | Deliver vertical slices through those boundaries | The create-event slice now compiles, runs, persists and covers its invalid-time failure path. |
 | Implement notification capability after the core event lifecycle, but before Should/Could features | Notifications depend on established event operations and are an infrastructure concern, but remain a Must requirement. |
-| Provisional generated-client approach: expose OpenAPI and use NSwag to generate a C# client | Swagger/OpenAPI UI is human-facing documentation; it does not supply third parties with callable client code. NSwag can consume the OpenAPI document and generate typed C# methods/models. Validate this early enough to fall back or defer honestly if tooling cost is disproportionate. |
-| Generated-client deliverable means source plus reproducible generation, not package publication | Supply generated C# client code, pinned tool/configuration or exact command, and a minimal usage example. NuGet publication is not requested. |
+| Swagger UI over the existing OpenAPI document | Adds reviewer-facing interactive documentation with one small package/configuration change. It is Development-only for this assessment. |
+| Defer generated client tooling | The OpenAPI document is a valid future generator input, but selecting, configuring, compiling, and distributing a client adds disproportionate concepts for the remaining scope. No generated client is claimed. |
+| Numeric optimistic concurrency on the Event aggregate | Reuses one `Version` value across update and attendance writes. The application rejects stale client versions and EF Core detects a race at save time. This is deliberately simpler than ETags, merge/retry, or distributed locks. |
+| Attendance response is the existing attendee boolean | PATCH changes only `isAttending` and returns 204. It demonstrates accept/reject without inventing invitation workflow, response history, comments, or separate reservation entities. |
 | Keep assessment artifacts; ignore unrelated/local/generated clutter | Phase checkpoints are committed on main. The precise ignore file covers build/IDE output, user files, SQLite databases, temporary PDF renders, and local agent guidance. |
 
 ### Phase 4 notification design
@@ -65,22 +66,11 @@ Keep this a short live dashboard. Replace stale entries; report only verified ou
 | Extension path | Email, iCalendar, SMS, or broker adapters can implement the same boundary; a composite publisher can add multi-channel dispatch later without changing the Domain or event use cases. |
 | Explicitly deferred | External delivery, delivery-failure policy, channel preferences, templates, retries, deduplication, delivery records, and a transactional outbox are outside this assessment slice. These can be added behind the established boundary if production reliability is required. |
 
-### Generated-client decision clarification
+### 80/20 scope boundary
 
-- **OpenAPI document:** machine-readable API contract describing operations, parameters, schemas, and responses.
-- **Swagger UI or another API UI:** interactive human documentation rendered from that contract; useful for exploring and manually calling endpoints.
-- **Generated client:** C# source compiled into a consumer application. It exposes typed methods and models and handles HTTP request construction and JSON serialization.
-- Current proposed flow: API produces an OpenAPI JSON document -> NSwag reads it -> generated C# client is committed with a repeatable generation command/configuration -> a small example or test demonstrates consumption.
-- Do not claim this Should requirement is complete until the client is generated, builds, and can call or be meaningfully smoke-tested against the API.
-- If NSwag cannot be integrated proportionately within the remaining time, preserve the OpenAPI contract and document the client as deferred. Do not replace the client requirement with Swagger UI.
-
-## Decisions still requiring explicit semantics
-
-These are not settled by the PDF and must be decided before their slice is implemented:
-
-| Decision | Options to resolve and document |
-| --- | --- |
-| Attendance | Default value and whether accept/reject updates one attendee by stable identifier. |
+- Swagger UI is human documentation, not a generated client; the client requirement remains explicitly deferred.
+- Concurrency demonstrates detection and a clear 409 response, not conflict resolution.
+- Accept/reject changes one attendee's boolean response by stable identifier; it is not a broader invitation or reservation workflow.
 
 ## Sequential implementation plan
 
@@ -94,22 +84,22 @@ This is the agreed working plan, not a change to the employer's priorities. Adju
 | 4 | Update and cancel: HTTP operations, domain transitions, persistence, tests | Complete the Must event lifecycle. |
 | 5 | Minimal observable notifications: application trigger, infrastructure adapter, and focused tests | Complete the remaining Must capability without external-delivery risk. |
 | 6 | Fresh build/run, tests, README, ignore/tracked-file audit, Git state, and submission preparation | Preserve the final 30 minutes for an honest runnable handover. |
-| 7 | Generated client, public docs UI, accept/reject, or other Should items only if every Must item is stable | Do not trade required stability for optional breadth. |
-
-Still decide and record only the attendance semantics before attempting that Should item. This is an assumption where the PDF is silent, not an extra employer requirement.
+| 7 | Lean Swagger UI, attendee response, and optimistic-concurrency demonstrations | Cover selected Should/Could items without introducing a client-generation toolchain or workflow platform. |
 
 ## Verification
 
 | Command / request | Observed result |
 | --- | --- |
-| dotnet build AppointmentScheduler.slnx | Passed; 0 warnings, 0 errors. |
-| dotnet restore AppointmentScheduler.slnx | Passed; all projects up-to-date for restore. |
-| dotnet test AppointmentScheduler.slnx | Passed; 18 passed, 0 failed, 0 skipped after simplifying notification orchestration. |
-| POST http://127.0.0.1:5158/api/events | HTTP 201; returned event and attendee IDs; EF logs confirmed inserts to Events and Attendees. |
-| GET /api/events?from=2030-01-01T09:30:00Z&to=2030-01-01T10:30:00Z&search=cardiology | HTTP 200; returned only the overlapping matching event; EF logs confirmed server-side SQLite filtering and ordering. |
-| POST -> PUT -> DELETE twice -> GET lifecycle smoke | HTTP 201, 200, 204, 204; default query returned no cancelled event and includeCancelled=true returned the updated cancelled event. |
-| POST /api/events Phase 4 smoke on port 5169 | Streamlined implementation persisted and returned the event; runtime emitted the simulated Created notification log with event ID and recipient count after EF inserts. Disposable SQLite files were removed. |
-| GET http://127.0.0.1:5158/openapi/v1.json | HTTP 200; OpenAPI 3.1.1 document contains /api/events. |
+| dotnet clean -> restore -> build AppointmentScheduler.slnx | Passed from clean output; all projects restored, 0 warnings, 0 errors. |
+| dotnet test AppointmentScheduler.slnx --no-build --no-restore | Passed; 22 passed, 0 failed, 0 skipped. |
+| Lean optional-feature tests | Swagger UI returned 200; attendee PATCH persisted its boolean response; stale API update returned 409; two EF writers caused the second save to raise the mapped concurrency exception. |
+| dotnet run --project AppointmentScheduler.csproj --no-build --launch-profile http | Started cleanly in Development on http://localhost:5158 using a fresh disposable SQLite database; GET /api/events returned HTTP 200 with an empty array. |
+| Fresh-database HTTP lifecycle smoke on port 5170 | Invalid create 400; create 201; combined overlap filter/search 200 with one match; update 200; inverted range 400; cancel 204 then 204; default list empty; includeCancelled returned the cancelled event; cancelled update 400; unknown cancel 404. |
+| Runtime notification logs | Exactly one simulated Created, Updated, and Cancelled log appeared after the corresponding EF writes; the repeated cancellation emitted no duplicate. |
+| GET /openapi/v1.json | HTTP 200; OpenAPI 3.1.1 document contains /api/events. |
+| Fresh-database lean feature smoke on port 5160 | Swagger UI 200; create version 1; attendance PATCH 204 and persisted true at version 2; first update 200; repeated stale update 409. |
+| Reviewer README audit | Clean-download prerequisites, exact restore/build/test/run commands, configured port, endpoint examples, version workflow, SQLite reset/configuration, Swagger/OpenAPI URLs, and troubleshooting were checked against the verified project configuration. |
+| Repository audit | No tracked build/database artifacts or obvious secret patterns found; the existing ignored development database was left untouched and the disposable smoke database was removed. |
 
 ## Time and priorities
 
@@ -126,16 +116,17 @@ Record each checkpoint only after its commit is verified in Git.
 | 1 | Create-event vertical slice, persistence, OpenAPI, and focused tests | Complete | 7a0c10b - Commit 1: Event aggregate, attendees, validation, application use case, EF Core/SQLite persistence, controller endpoint, OpenAPI, and focused tests. |
 | 2 | List, filter, and search with SQLite-backed tests | Complete | 4c6bfa9 - Implement event listing filtering and search |
 | 3 | Update and cancel with lifecycle tests | Complete | 6d08132 - Implement event update and cancellation |
-| 4 | Minimal observable notifications with tests | Ready to commit | |
-| 5 | Must-set stabilization and full smoke verification | Pending | |
-| 6 | Should items, only if the Must set is stable | Conditional | |
+| 4 | Minimal observable notifications with tests | Complete | d8636d9 - Add a minimal observable notification boundary and infrastructure implementation |
+| 5 | Must-set stabilization and full smoke verification | Ready to commit | |
+| 6 | Lean Swagger UI, attendee response, and optimistic concurrency | Ready to commit | |
 | 7 | Final documentation, Git audit, commit/push, and submission preparation | Pending | |
 
 ## Handover
 
-- Implemented and verified: create, list/filter/search, update, soft cancellation, aggregate invariants, relational SQLite persistence, observable simulated notifications, OpenAPI document, focused domain/application/infrastructure/API tests
+- Implemented and verified: create, list/filter/search, update, soft cancellation, simple attendee response, optimistic concurrency, aggregate invariants, relational SQLite persistence, observable simulated notifications, OpenAPI/Swagger documentation, focused domain/application/infrastructure/API tests
 - Missing or unverified Must items: none currently identified
-- Deferred Should/Could items: generated client, public documentation UI, accept/reject, simultaneous-update handling, availability checks
-- Known limitations: startup uses EnsureCreated rather than migrations; list results are not paginated; validation errors use one event-level domain error key
-- AI assistance: Phase 1-4 code/tests/documentation drafted with AI; build, tests, SQLite persistence, HTTP lifecycle behavior, simulated notification logging, and OpenAPI output executed locally
-- Git status, final commit, remote/link: Phase 3 committed as 6d08132 on main and tracks origin/main; Phase 4 changes are verified and ready for checkpoint commit
+- Deferred Should/Could items: generated client, production documentation hosting, richer invitation workflow, automatic conflict resolution, availability checks
+- Known limitations: startup uses EnsureCreated rather than migrations; existing development databases must be recreated after schema changes; list results are not paginated; validation errors use one event-level domain error key
+- AI assistance: Phase 1-5 code/tests/documentation drafted with AI; clean build, tests, SQLite persistence, complete HTTP lifecycle behavior, simulated notification logging, OpenAPI output, reviewer startup, and repository hygiene executed locally
+- Git status, final commit, remote/link: Phase 4 committed as d8636d9 on main and matches origin/main; reviewer-startup, documentation, and lean optional-feature changes are uncommitted
+- Commit-note clarification: the Phase 4 commit subject mentions failure handling, but the streamlined implementation intentionally defers external delivery-failure policy as documented above

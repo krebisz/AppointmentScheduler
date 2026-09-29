@@ -49,6 +49,7 @@ public sealed class EventNotificationTests
         await handler.HandleAsync(
             new UpdateEventCommand(
                 calendarEvent.Id,
+                calendarEvent.Version,
                 "Updated consultation",
                 "Updated description",
                 StartTime.AddHours(1),

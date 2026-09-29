@@ -34,6 +34,7 @@ public sealed class CreateEventHandler(
             calendarEvent.Description,
             calendarEvent.StartTime,
             calendarEvent.EndTime,
+            calendarEvent.Version,
             calendarEvent.Attendees
                 .Select(attendee => new CreatedAttendeeResult(
                     attendee.Id,
@@ -62,6 +63,7 @@ public sealed record CreateEventResult(
     string Description,
     DateTimeOffset StartTime,
     DateTimeOffset EndTime,
+    long Version,
     IReadOnlyCollection<CreatedAttendeeResult> Attendees);
 
 public sealed record CreatedAttendeeResult(

@@ -32,6 +32,7 @@ public sealed record CreateEventResponse(
     string Description,
     DateTimeOffset StartTime,
     DateTimeOffset EndTime,
+    long Version,
     IReadOnlyCollection<CreatedAttendeeResponse> Attendees);
 
 public sealed record CreatedAttendeeResponse(
@@ -47,6 +48,7 @@ public sealed record EventListItemResponse(
     DateTimeOffset StartTime,
     DateTimeOffset EndTime,
     bool IsCancelled,
+    long Version,
     IReadOnlyCollection<EventAttendeeResponse> Attendees);
 
 public sealed record EventAttendeeResponse(
@@ -56,6 +58,8 @@ public sealed record EventAttendeeResponse(
     bool IsAttending);
 
 public sealed record UpdateEventRequest(
+    [param: Range(1, long.MaxValue)]
+    long Version,
     [param: Required]
     [param: StringLength(CalendarEvent.TitleMaxLength)]
     string Title,
@@ -84,6 +88,7 @@ public sealed record UpdateEventResponse(
     string Description,
     DateTimeOffset StartTime,
     DateTimeOffset EndTime,
+    long Version,
     IReadOnlyCollection<UpdatedAttendeeResponse> Attendees);
 
 public sealed record UpdatedAttendeeResponse(
@@ -91,3 +96,8 @@ public sealed record UpdatedAttendeeResponse(
     string Name,
     string EmailAddress,
     bool IsAttending);
+
+public sealed record SetAttendanceRequest(
+    bool IsAttending,
+    [param: Range(1, long.MaxValue)]
+    long Version);

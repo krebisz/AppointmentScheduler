@@ -34,6 +34,9 @@ public sealed class SchedulerDbContext(DbContextOptions<SchedulerDbContext> opti
             .IsRequired();
         eventBuilder.Property(calendarEvent => calendarEvent.IsCancelled)
             .IsRequired();
+        eventBuilder.Property(calendarEvent => calendarEvent.Version)
+            .IsConcurrencyToken()
+            .IsRequired();
 
         eventBuilder.OwnsMany(
             calendarEvent => calendarEvent.Attendees,

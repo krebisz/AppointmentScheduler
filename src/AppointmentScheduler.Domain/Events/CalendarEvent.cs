@@ -28,6 +28,7 @@ public sealed class CalendarEvent
         Description = description;
         StartTime = startTime;
         EndTime = endTime;
+        Version = 1;
         _attendees.AddRange(attendees);
     }
 
@@ -42,6 +43,8 @@ public sealed class CalendarEvent
     public DateTimeOffset EndTime { get; private set; }
 
     public bool IsCancelled { get; private set; }
+
+    public long Version { get; private set; }
 
     public IReadOnlyCollection<Attendee> Attendees => _attendees;
 
@@ -93,6 +96,7 @@ public sealed class CalendarEvent
         EndTime = details.EndTime;
         _attendees.Clear();
         _attendees.AddRange(details.Attendees);
+        Version++;
     }
 
     public bool Cancel()
@@ -103,6 +107,29 @@ public sealed class CalendarEvent
         }
 
         IsCancelled = true;
+        Version++;
+        return true;
+    }
+
+    public bool SetAttendance(Guid attendeeId, bool isAttending)
+    {
+        if (IsCancelled)
+        {
+            throw new DomainValidationException(
+                "Attendance cannot be changed for a cancelled event.");
+        }
+
+        var attendee = _attendees.SingleOrDefault(item => item.Id == attendeeId)
+            ?? throw new DomainValidationException(
+                "The attendee does not belong to this event.");
+
+        if (attendee.IsAttending == isAttending)
+        {
+            return false;
+        }
+
+        attendee.SetAttendance(isAttending);
+        Version++;
         return true;
     }
 
@@ -216,6 +243,11 @@ public sealed class Attendee
         }
 
         return new Attendee(Guid.NewGuid(), name, emailAddress, details.IsAttending);
+    }
+
+    internal void SetAttendance(bool isAttending)
+    {
+        IsAttending = isAttending;
     }
 }
 

@@ -49,6 +49,19 @@ public sealed class CreateEventEndpointTests(ApiFactory factory)
         Assert.Equal(HttpStatusCode.BadRequest, httpResponse.StatusCode);
     }
 
+    [Fact]
+    public async Task Swagger_ui_is_available_in_development()
+    {
+        using var client = factory.CreateClient();
+
+        var response = await client.GetAsync("/swagger/index.html");
+
+        Assert.Equal(HttpStatusCode.OK, response.StatusCode);
+        Assert.Contains(
+            "Swagger UI",
+            await response.Content.ReadAsStringAsync());
+    }
+
     private static CreateEventRequest ValidRequest()
     {
         return new CreateEventRequest(

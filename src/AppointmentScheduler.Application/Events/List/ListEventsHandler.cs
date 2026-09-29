@@ -32,6 +32,7 @@ public sealed class ListEventsHandler(IEventRepository eventRepository)
                 calendarEvent.StartTime,
                 calendarEvent.EndTime,
                 calendarEvent.IsCancelled,
+                calendarEvent.Version,
                 calendarEvent.Attendees
                     .Select(attendee => new ListedAttendeeResult(
                         attendee.Id,
@@ -56,6 +57,7 @@ public sealed record ListedEventResult(
     DateTimeOffset StartTime,
     DateTimeOffset EndTime,
     bool IsCancelled,
+    long Version,
     IReadOnlyCollection<ListedAttendeeResult> Attendees);
 
 public sealed record ListedAttendeeResult(

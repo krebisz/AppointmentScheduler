@@ -1,0 +1,113 @@
+Perform a tightly time-boxed submission-curation and code-review-defensibility pass. Spend no more than 10–15 minutes (BELOW ARE STEPS TO FOLLOW, SKIP THE MOST TIME-CONSUMING, LOW VALUE ONES TO SAVE TIME). Do not redesign the solution, add features, or change externally observable behavior unless correcting a verified defect.
+
+Assume I must explain and justify every meaningful handwritten file, abstraction, dependency, and architectural boundary during a 45-minute code review. The final repository must contain only material that supports the submitted solution or helps Doctorly understand it.
+
+## 1. Inspect before changing
+
+Inspect:
+
+- The complete repository tree, current Git diff, `git status`, and `git ls-files`.
+- Projects, project references, NuGet packages, configuration, migrations, generated artifacts, source, tests, and documentation.
+- The complete request path through API, Application, Domain, and Infrastructure.
+- Ignored and untracked files that could accidentally be submitted or reveal internal working material.
+
+Do not delete an uncertain file merely because it appears unused. List uncertain candidates as proposed removals instead.
+
+## 2. Apply the justification test
+
+For every non-trivial component, retain it only when it has a clear justification based on at least one of these:
+
+1. It directly implements an assessment requirement.
+2. It protects a domain invariant or data-integrity rule.
+3. It establishes a necessary dependency or infrastructure boundary.
+4. It materially improves testability or substitutability.
+5. It makes the implementation simpler or clearer overall.
+
+Identify code that is technically used but unnecessarily bulky, difficult to defend, or inconsistent with the stated architecture. Simplify it only when the change is low-risk and makes the design easier to explain.
+
+## 3. Remove or simplify unjustified code
+
+Remove or simplify, where clearly safe:
+
+- Remaining template or sample code.
+- Unused files, types, methods, DTOs, interfaces, imports, packages, and project references.
+- Empty, speculative, or single-use abstractions that add indirection without meaningful separation.
+- Generic repositories or wrappers that merely duplicate EF Core without expressing a useful boundary.
+- Premature extensibility, configuration, or infrastructure not exercised by the solution.
+- Duplicate mapping, validation, or error-handling logic where low-risk consolidation improves clarity.
+- Excessive generated-style comments, comments that only restate code, stale TODOs, and abandoned alternatives.
+- Documentation that describes planned behavior as implemented.
+
+## 4. Audit and remove non-code submission clutter
+
+Delete files that clearly should not form part of the employer submission, including (EXCEPT WHERE THEY MAY HAVE EXPLANATORY VALUE FOR THE REVIEWER OR USER):
+
+- ZIP/archive files, duplicate project copies, and unused generated output.
+- Logs, temporary files, local/disposable database files, test remnants, build output, and IDE/user-specific state.
+- AI prompts, agent instructions, coaching notes, evaluation reports, scratch material, and internal workflow artifacts intended only to guide implementation.
+- Obsolete or superseded specifications and documents.
+- Template/sample HTTP files or documentation that no longer represents the implemented API.
+
+Update `.gitignore` with precise rules for local/generated clutter that may recur. Do not use broad rules that hide legitimate source, Markdown, migrations, tests, generated-client deliverables, or required configuration. Remember that `.gitignore` does not untrack an already tracked file; inspect `git ls-files` and untrack exact unwanted files while retaining local copies only when they are still needed.
+
+Preserve non-code files that genuinely serve the submitted solution, including:
+
+- `README.md`, `.gitignore`, and required runtime/tool configuration.
+- EF migrations and reproducible database setup.
+- OpenAPI and generated-client source/configuration when supplied as deliverables.
+- Concise architecture, decisions, assumptions, omissions, and limitations that help Doctorly understand the implementation.
+- The assessment brief or worklog only if it provides useful submission context, is accurate and professional, and contains no internal coaching material.
+
+## 5. Preserve justified implementation
+
+Preserve:
+
+- Correct required behavior and verified tests.
+- Clear Domain/Application/Infrastructure/API responsibilities and dependency direction.
+- Interfaces representing genuine persistence, notification, or other external boundaries.
+- Domain invariants, meaningful validation, and data-integrity protections.
+- EF migrations and reproducible database setup.
+- OpenAPI and generated-client deliverables.
+- Concise, accurate documentation.
+- Any code whose removal or restructuring creates meaningful correctness or delivery risk.
+
+Treat generated artifacts separately:
+
+- Clearly identify EF migrations and generated client code as generated.
+- Do not manually refactor generated code merely for style.
+- Ensure their source/configuration and regeneration instructions are clear.
+- Do not present generated artifacts as evidence of handwritten design quality.
+
+## 6. Guardrails
+
+Do not:
+
+- Add patterns, abstractions, infrastructure, documentation, or features.
+- Perform broad renaming or repository reorganization.
+- Collapse justified architectural boundaries merely to reduce file or line count.
+- Optimize for fewer files or lines at the expense of clarity.
+- Change public contracts unless correcting a verified defect.
+- Delete user work or uncertain files without first listing them as proposed removals.
+- Commit or push yet.
+
+Make small, reviewable changes. If a cleanup change causes a failure and cannot be corrected immediately, revert only that cleanup change.
+
+## 7. Verify and report
+
+After cleanup:
+
+- Reinspect the filesystem, `git status`, `git diff`, and `git ls-files`.
+- Run restore, build, all tests, and essential smoke requests.
+- Update `WORKLOG.md` and `README.md` only where existing statements became stale.
+- Do not create additional reviewer-facing documents unless essential.
+
+Report:
+
+1. Every code component removed or simplified, and why.
+2. Every non-code file deleted or untracked, and why.
+3. Apparent overhead deliberately retained and its concrete justification.
+4. The purpose of each remaining project/layer and its dependency direction.
+5. The five most important implementation decisions I must explain in review.
+6. Components whose rationale is weak or that I should study before the review.
+7. Exact restore, build, test, and smoke-check results.
+8. Remaining submission risks and any proposed removals that need my decision.

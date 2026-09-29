@@ -63,6 +63,7 @@ public sealed class CalendarEventTests
         var attendee = Assert.Single(calendarEvent.Attendees);
         Assert.Equal("new@example.com", attendee.EmailAddress);
         Assert.True(attendee.IsAttending);
+        Assert.Equal(2, calendarEvent.Version);
     }
 
     [Fact]
@@ -105,5 +106,6 @@ public sealed class CalendarEventTests
         Assert.True(calendarEvent.IsCancelled);
         Assert.True(firstCancellation);
         Assert.False(secondCancellation);
+        Assert.Equal(2, calendarEvent.Version);
     }
 }

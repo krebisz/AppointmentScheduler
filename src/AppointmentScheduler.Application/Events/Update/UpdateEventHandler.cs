@@ -18,6 +18,14 @@ public sealed class UpdateEventHandler(
             cancellationToken)
             ?? throw new EventNotFoundException(command.Id);
 
+        if (command.Version != calendarEvent.Version)
+        {
+            throw new EventConcurrencyException(
+                calendarEvent.Id,
+                command.Version,
+                calendarEvent.Version);
+        }
+
         calendarEvent.Update(
             command.Title,
             command.Description,
@@ -39,6 +47,7 @@ public sealed class UpdateEventHandler(
             calendarEvent.Description,
             calendarEvent.StartTime,
             calendarEvent.EndTime,
+            calendarEvent.Version,
             calendarEvent.Attendees
                 .Select(attendee => new UpdatedAttendeeResult(
                     attendee.Id,
@@ -51,6 +60,7 @@ public sealed class UpdateEventHandler(
 
 public sealed record UpdateEventCommand(
     Guid Id,
+    long Version,
     string Title,
     string Description,
     DateTimeOffset StartTime,
@@ -68,6 +78,7 @@ public sealed record UpdateEventResult(
     string Description,
     DateTimeOffset StartTime,
     DateTimeOffset EndTime,
+    long Version,
     IReadOnlyCollection<UpdatedAttendeeResult> Attendees);
 
 public sealed record UpdatedAttendeeResult(
