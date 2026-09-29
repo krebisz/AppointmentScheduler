@@ -1,0 +1,111 @@
+# Worklog — Doctorly technical task
+
+Keep this a short live dashboard. Replace stale entries; report only verified outcomes. `ASSESSMENT.md` and the PDF define requirements.
+
+## Snapshot
+
+- Remaining budget: approximately 2 hours 30 minutes
+- Implementation budget: approximately 2 hours, preserving the final 30 minutes for handover
+- Environment/setup time lost: approximately 45 minutes to sandbox failures, Google Drive file locking/path issues, relocation, and repository realignment
+- Last verified: 2026-09-29 11:28 +02:00
+- Handover reserve: final 30 minutes
+- Current slice: create event from HTTP through domain/application into SQLite - verified
+- Next action: list/filter/search slice, subject to remaining time
+
+## Coverage
+
+`Not started` / `In progress` / `Verified` / `Deferred` / `Blocked` refer to this repository, never the previous practice project.
+
+| Priority | Requirement | Status | Evidence or gap |
+| --- | --- | --- | --- |
+| Must | Event and attendee fields; size limits | Verified | Domain and API enforce title 200, description 2,000, attendee name 200, email 320; Event owns Attendees. |
+| Must | Create event | Verified | POST /api/events returned HTTP 201 and persisted Event/Attendee rows to SQLite. |
+| Must | Update event | Not started | |
+| Must | Delete/cancel event | Not started | |
+| Must | List with filters | Not started | |
+| Must | Search events | Not started | |
+| Must | Notification capability | Not started | |
+| Must | Appropriate tests; runnable solution | Verified | 5 focused tests pass; solution builds with 0 warnings/errors. |
+| Explicit design | EF or similar, storage, layering, interfaces, DDD patterns | Verified | Separate Domain, Application, Infrastructure and API projects/boundaries; EF Core SQLite repository implements the application port. |
+| Should | OpenAPI | Verified | Development document returned HTTP 200, OpenAPI 3.1.1, with /api/events. |
+| Should | Generated client | Not started | |
+| Should | Public-facing generated docs | Not started | |
+| Should | Accept/reject event | Not started | |
+| Could | Same-event simultaneous updates | Not started | |
+| Could | Attendee availability or other advanced features | Not started | |
+
+## Assumptions and material choices
+
+| Choice / assumption | Reason and cost |
+| --- | --- |
+| .NET SDK 10.0.401 and net10.0 | This is the only installed SDK; the email explicitly waives .NET 5. |
+| ASP.NET Core Web API with controllers and OpenAPI enabled | Preserves the supplied controller template and makes HTTP contracts explicit. No authentication, frontend, or containers are required. |
+| EF Core SQLite 10.0.12 with startup EnsureCreated | Provides verified relational persistence with no external server. Migrations are deferred; a fresh local database is created automatically. |
+| Event aggregate root owns Attendees | Enforces event time, field limits, at least one attendee, valid email, and case-insensitive unique attendee emails in one consistency boundary. |
+| Accept offset-aware timestamps and persist UTC | Avoids local-time ambiguity; end time must be later than start time. |
+| Separate Domain, Application, Infrastructure, and API boundaries | Project references enforce Domain <- Application <- Infrastructure, while the API composes Application and Infrastructure. Only the persistence boundary has an interface. |
+| Deliver vertical slices through those boundaries | The create-event slice now compiles, runs, persists and covers its invalid-time failure path. |
+| Implement notification capability after the core event lifecycle, but before Should/Could features | Notifications depend on established event operations and are an infrastructure concern, but remain a Must requirement. |
+| Provisional generated-client approach: expose OpenAPI and use NSwag to generate a C# client | Swagger/OpenAPI UI is human-facing documentation; it does not supply third parties with callable client code. NSwag can consume the OpenAPI document and generate typed C# methods/models. Validate this early enough to fall back or defer honestly if tooling cost is disproportionate. |
+| Generated-client deliverable means source plus reproducible generation, not package publication | Supply generated C# client code, pinned tool/configuration or exact command, and a minimal usage example. NuGet publication is not requested. |
+| Keep assessment artifacts; ignore unrelated/local/generated clutter | Git is initialized but has no commits. The precise ignore file covers build/IDE output, user files, SQLite databases, temporary PDF renders, and local agent guidance. |
+
+### Generated-client decision clarification
+
+- **OpenAPI document:** machine-readable API contract describing operations, parameters, schemas, and responses.
+- **Swagger UI or another API UI:** interactive human documentation rendered from that contract; useful for exploring and manually calling endpoints.
+- **Generated client:** C# source compiled into a consumer application. It exposes typed methods and models and handles HTTP request construction and JSON serialization.
+- Current proposed flow: API produces an OpenAPI JSON document -> NSwag reads it -> generated C# client is committed with a repeatable generation command/configuration -> a small example or test demonstrates consumption.
+- Do not claim this Should requirement is complete until the client is generated, builds, and can call or be meaningfully smoke-tested against the API.
+- If NSwag cannot be integrated proportionately within the remaining time, preserve the OpenAPI contract and document the client as deferred. Do not replace the client requirement with Swagger UI.
+
+## Decisions still requiring explicit semantics
+
+These are not settled by the PDF and must be decided before their slice is implemented:
+
+| Decision | Options to resolve and document |
+| --- | --- |
+| Cancellation | Soft-cancel state versus physical deletion; define whether cancelled events appear in queries. |
+| Filtering/search | Supported filter fields, ranges, pagination if any, and whether search covers title only or title/description. |
+| Attendance | Default value and whether accept/reject updates one attendee by stable identifier. |
+| Notifications | Triggering operations, observable adapter, payload, and whether delivery failure fails the event operation. |
+
+## Sequential implementation plan
+
+This is the agreed working plan, not a change to the employer's priorities. Adjust to actual remaining time and explain material deviations. Layers define responsibility; slices deliver working use cases across layers.
+
+| Step | Deliverable and boundaries | Why this slice |
+| --- | --- | --- |
+| 1 | Inspect/bootstrap Web API, select SDK and SQLite/EF setup; outline Event aggregate, attendee ownership, and invariants | Establish only the foundation needed for the first operation. |
+| 2 | Create event: HTTP DTO/controller, application orchestration, domain validation, EF save, focused tests | Demonstrate a runnable end-to-end write path. |
+| 3 | List, filter, and search: API query contracts, application query handling, EF queries, tests | Make stored data observable and deliver required reads. |
+| 4 | Update and cancel: HTTP operations, domain transitions, persistence, tests | Complete the Must event lifecycle. |
+| 5 | Minimal observable notifications: application trigger, infrastructure adapter, and focused tests | Complete the remaining Must capability without external-delivery risk. |
+| 6 | Fresh build/run, tests, README, ignore/tracked-file audit, Git state, and submission preparation | Preserve the final 30 minutes for an honest runnable handover. |
+| 7 | Generated client, public docs UI, accept/reject, or other Should items only if every Must item is stable | Do not trade required stability for optional breadth. |
+
+Still decide and record: cancellation versus deletion, filter/search semantics, attendance meaning, and notification triggers/mechanism/failure behavior. These are assumptions where the PDF is silent, not extra employer requirements.
+
+## Verification
+
+| Command / request | Observed result |
+| --- | --- |
+| dotnet build AppointmentScheduler.slnx | Passed; 0 warnings, 0 errors. |
+| dotnet test AppointmentScheduler.slnx | Passed; 5 passed, 0 failed, 0 skipped. |
+| POST http://127.0.0.1:5158/api/events | HTTP 201; returned event and attendee IDs; EF logs confirmed inserts to Events and Attendees. |
+| GET http://127.0.0.1:5158/openapi/v1.json | HTTP 200; OpenAPI 3.1.1 document contains /api/events. |
+
+## Time and priorities
+
+- Initial priority / smallest runnable slice: Event aggregate and attendees -> create use case -> SQLite repository -> POST endpoint -> focused tests
+- Midpoint adjustment: environment/setup delay reduced the remaining implementation window to approximately 2 hours; prioritize the complete Must lifecycle, persistence/tests, then minimal observable notifications
+- Handover cutoff: stop feature work with 30 minutes remaining for fresh verification, documentation, Git cleanup, and submission
+
+## Handover
+
+- Implemented and verified: create event, aggregate invariants, relational SQLite persistence, OpenAPI document, focused domain/application/API tests
+- Missing or unverified Must items: update, cancel/delete, list/filter, search, notifications
+- Deferred Should/Could items: generated client, public documentation UI, accept/reject, simultaneous-update handling, availability checks
+- Known limitations: startup uses EnsureCreated rather than migrations; no read endpoint yet; validation errors use one event-level domain error key
+- AI assistance: first-slice code and documentation drafted with AI; build, tests, SQLite persistence, HTTP 201, and OpenAPI output executed locally
+- Git status, final commit, remote/link: local repository initialized; no commit or remote yet as requested
