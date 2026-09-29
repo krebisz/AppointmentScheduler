@@ -1,6 +1,10 @@
+using AppointmentScheduler.Application.Events.Notifications;
+
 namespace AppointmentScheduler.Application.Events.Cancel;
 
-public sealed class CancelEventHandler(IEventRepository eventRepository)
+public sealed class CancelEventHandler(
+    IEventRepository eventRepository,
+    IEventNotificationPublisher eventNotificationPublisher)
 {
     public async Task HandleAsync(
         Guid id,
@@ -11,7 +15,14 @@ public sealed class CancelEventHandler(IEventRepository eventRepository)
             cancellationToken)
             ?? throw new EventNotFoundException(id);
 
-        calendarEvent.Cancel();
+        if (!calendarEvent.Cancel())
+        {
+            return;
+        }
+
         await eventRepository.SaveChangesAsync(cancellationToken);
+        await eventNotificationPublisher.PublishAsync(
+            EventNotification.From(calendarEvent, EventNotificationType.Cancelled),
+            cancellationToken);
     }
 }

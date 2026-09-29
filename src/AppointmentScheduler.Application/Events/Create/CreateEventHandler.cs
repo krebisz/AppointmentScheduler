@@ -1,8 +1,11 @@
 using AppointmentScheduler.Domain.Events;
+using AppointmentScheduler.Application.Events.Notifications;
 
 namespace AppointmentScheduler.Application.Events.Create;
 
-public sealed class CreateEventHandler(IEventRepository eventRepository)
+public sealed class CreateEventHandler(
+    IEventRepository eventRepository,
+    IEventNotificationPublisher eventNotificationPublisher)
 {
     public async Task<CreateEventResult> HandleAsync(
         CreateEventCommand command,
@@ -21,6 +24,9 @@ public sealed class CreateEventHandler(IEventRepository eventRepository)
                 attendee.IsAttending)));
 
         await eventRepository.AddAsync(calendarEvent, cancellationToken);
+        await eventNotificationPublisher.PublishAsync(
+            EventNotification.From(calendarEvent, EventNotificationType.Created),
+            cancellationToken);
 
         return new CreateEventResult(
             calendarEvent.Id,

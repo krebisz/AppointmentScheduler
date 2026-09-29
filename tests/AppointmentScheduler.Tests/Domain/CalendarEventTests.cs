@@ -99,9 +99,11 @@ public sealed class CalendarEventTests
             start.AddMinutes(30),
             [new AttendeeDetails("Alex Patient", "alex@example.com", false)]);
 
-        calendarEvent.Cancel();
-        calendarEvent.Cancel();
+        var firstCancellation = calendarEvent.Cancel();
+        var secondCancellation = calendarEvent.Cancel();
 
         Assert.True(calendarEvent.IsCancelled);
+        Assert.True(firstCancellation);
+        Assert.False(secondCancellation);
     }
 }

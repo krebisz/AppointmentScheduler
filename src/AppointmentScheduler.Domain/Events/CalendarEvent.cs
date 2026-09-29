@@ -95,9 +95,15 @@ public sealed class CalendarEvent
         _attendees.AddRange(details.Attendees);
     }
 
-    public void Cancel()
+    public bool Cancel()
     {
+        if (IsCancelled)
+        {
+            return false;
+        }
+
         IsCancelled = true;
+        return true;
     }
 
     private static ValidatedEventDetails ValidateDetails(

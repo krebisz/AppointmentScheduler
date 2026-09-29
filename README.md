@@ -50,11 +50,17 @@ The date filters therefore use inclusive overlap semantics. An inverted date ran
 - DELETE /api/events/{id} soft-cancels the event and returns HTTP 204. Repeating the cancellation is idempotent.
 - Missing events return HTTP 404. Cancelled events cannot be updated.
 
+## Notifications
+
+After a create, update, or first cancellation is persisted, the application requests an event notification for the current attendee email addresses. The current infrastructure adapter is intentionally simulated: it writes a structured informational log containing the notification type, event ID, and recipient count, but sends no external email or message and does not log recipient addresses.
+
+Notification publication occurs after persistence. Repeating an idempotent cancellation does not publish another notification. External delivery guarantees, retries, and transactional outbox behavior are not implemented.
+
 ## Tests
 
     dotnet test AppointmentScheduler.slnx
 
-Last verified: 14 passed, 0 failed, 0 skipped.
+Last verified: 18 passed, 0 failed, 0 skipped.
 
 ## API contract
 
@@ -63,8 +69,8 @@ In Development, the OpenAPI 3.1.1 document is available at /openapi/v1.json. It 
 ## Design and current limits
 
 - Domain owns the Event aggregate, attendees, and invariants.
-- Application orchestrates creation through an event-repository port.
-- Infrastructure implements that port using EF Core 10.0.12 and SQLite.
+- Application orchestrates lifecycle use cases through repository and channel-neutral notification ports.
+- Infrastructure implements those ports using EF Core 10.0.12 with SQLite and an in-process structured-log notification adapter.
 - The root API project owns HTTP contracts, controllers, and dependency injection.
 - Database creation currently uses EnsureCreated rather than migrations.
-- Notifications, accept/reject, and concurrency handling are not implemented yet.
+- External notification delivery, retries/outbox behavior, accept/reject, and concurrency handling are not implemented.

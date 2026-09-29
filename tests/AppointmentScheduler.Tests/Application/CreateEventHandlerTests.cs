@@ -1,4 +1,5 @@
 using AppointmentScheduler.Application.Events.Create;
+using AppointmentScheduler.Application.Events.Notifications;
 using AppointmentScheduler.Infrastructure.Persistence;
 using Microsoft.Data.Sqlite;
 using Microsoft.EntityFrameworkCore;
@@ -22,7 +23,9 @@ public sealed class CreateEventHandlerTests
         {
             await setupContext.Database.EnsureCreatedAsync();
 
-            var handler = new CreateEventHandler(new EfEventRepository(setupContext));
+            var handler = new CreateEventHandler(
+                new EfEventRepository(setupContext),
+                new NoOpNotificationPublisher());
             var result = await handler.HandleAsync(
                 new CreateEventCommand(
                     "Consultation",
@@ -45,5 +48,15 @@ public sealed class CreateEventHandlerTests
         var attendee = Assert.Single(storedEvent.Attendees);
         Assert.Equal("alex@example.com", attendee.EmailAddress);
         Assert.False(attendee.IsAttending);
+    }
+
+    private sealed class NoOpNotificationPublisher : IEventNotificationPublisher
+    {
+        public Task PublishAsync(
+            EventNotification notification,
+            CancellationToken cancellationToken)
+        {
+            return Task.CompletedTask;
+        }
     }
 }
