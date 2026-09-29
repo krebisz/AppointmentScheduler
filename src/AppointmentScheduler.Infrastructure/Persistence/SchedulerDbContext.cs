@@ -1,5 +1,6 @@
 using AppointmentScheduler.Domain.Events;
 using Microsoft.EntityFrameworkCore;
+using Microsoft.EntityFrameworkCore.Storage.ValueConversion;
 
 namespace AppointmentScheduler.Infrastructure.Persistence;
 
@@ -10,6 +11,10 @@ public sealed class SchedulerDbContext(DbContextOptions<SchedulerDbContext> opti
 
     protected override void OnModelCreating(ModelBuilder modelBuilder)
     {
+        var utcTicksConverter = new ValueConverter<DateTimeOffset, long>(
+            value => value.UtcTicks,
+            value => new DateTimeOffset(value, TimeSpan.Zero));
+
         var eventBuilder = modelBuilder.Entity<CalendarEvent>();
 
         eventBuilder.ToTable("Events");
@@ -21,8 +26,12 @@ public sealed class SchedulerDbContext(DbContextOptions<SchedulerDbContext> opti
         eventBuilder.Property(calendarEvent => calendarEvent.Description)
             .HasMaxLength(CalendarEvent.DescriptionMaxLength)
             .IsRequired();
-        eventBuilder.Property(calendarEvent => calendarEvent.StartTime).IsRequired();
-        eventBuilder.Property(calendarEvent => calendarEvent.EndTime).IsRequired();
+        eventBuilder.Property(calendarEvent => calendarEvent.StartTime)
+            .HasConversion(utcTicksConverter)
+            .IsRequired();
+        eventBuilder.Property(calendarEvent => calendarEvent.EndTime)
+            .HasConversion(utcTicksConverter)
+            .IsRequired();
 
         eventBuilder.OwnsMany(
             calendarEvent => calendarEvent.Attendees,

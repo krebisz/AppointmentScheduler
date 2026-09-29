@@ -33,11 +33,21 @@ POST /api/events with application/json:
 
 A valid request returns HTTP 201 with generated event and attendee IDs. Timestamps are normalized to UTC. The event requires a title, description, a valid time range, and at least one attendee; attendee emails must be valid and unique within the event.
 
+## List, filter, and search
+
+GET /api/events returns events ordered by UTC start time. Optional query parameters can be combined:
+
+- from: includes events whose end time is on or after this timestamp.
+- to: includes events whose start time is on or before this timestamp.
+- search: case-insensitive title or description search.
+
+The date filters therefore use inclusive overlap semantics. An inverted date range returns HTTP 400.
+
 ## Tests
 
     dotnet test AppointmentScheduler.slnx
 
-Last verified: 5 passed, 0 failed, 0 skipped.
+Last verified: 8 passed, 0 failed, 0 skipped.
 
 ## API contract
 
@@ -50,4 +60,4 @@ In Development, the OpenAPI 3.1.1 document is available at /openapi/v1.json. It 
 - Infrastructure implements that port using EF Core 10.0.12 and SQLite.
 - The root API project owns HTTP contracts, controllers, and dependency injection.
 - Database creation currently uses EnsureCreated rather than migrations.
-- Update, cancel/delete, list/filter, search, notifications, accept/reject, and concurrency handling are not implemented yet.
+- Update, cancel/delete, notifications, accept/reject, and concurrency handling are not implemented yet.

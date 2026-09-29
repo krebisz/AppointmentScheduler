@@ -1,4 +1,5 @@
 using AppointmentScheduler.Application.Events.Create;
+using AppointmentScheduler.Application.Events.List;
 using AppointmentScheduler.Infrastructure;
 using AppointmentScheduler.Infrastructure.Persistence;
 using Microsoft.EntityFrameworkCore;
@@ -8,6 +9,7 @@ var builder = WebApplication.CreateBuilder(args);
 builder.Services.AddControllers();
 builder.Services.AddOpenApi();
 builder.Services.AddScoped<CreateEventHandler>();
+builder.Services.AddScoped<ListEventsHandler>();
 builder.Services.AddInfrastructure(
     builder.Configuration.GetConnectionString("SchedulerDatabase")
     ?? "Data Source=appointment-scheduler.db");
