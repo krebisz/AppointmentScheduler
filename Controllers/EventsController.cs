@@ -1,16 +1,15 @@
-using AppointmentScheduler.Application.Events;
 using AppointmentScheduler.Application.Events.Attendance;
 using AppointmentScheduler.Application.Events.Cancel;
 using AppointmentScheduler.Application.Events.Create;
 using AppointmentScheduler.Application.Events.List;
 using AppointmentScheduler.Application.Events.Update;
-using AppointmentScheduler.Domain.Events;
 using Microsoft.AspNetCore.Mvc;
 
 namespace AppointmentScheduler.Controllers;
 
 [ApiController]
 [Route("api/events")]
+[ProducesResponseType<ProblemDetails>(StatusCodes.Status500InternalServerError)]
 public sealed class EventsController(
     CreateEventHandler createEventHandler,
     ListEventsHandler listEventsHandler,
@@ -29,35 +28,27 @@ public sealed class EventsController(
         [FromQuery] bool includeCancelled,
         CancellationToken cancellationToken)
     {
-        try
-        {
-            var results = await listEventsHandler.HandleAsync(
-                new ListEventsQuery(from, to, search, includeCancelled),
-                cancellationToken);
+        var results = await listEventsHandler.HandleAsync(
+            new ListEventsQuery(from, to, search, includeCancelled),
+            cancellationToken);
 
-            return Ok(results
-                .Select(result => new EventListItemResponse(
-                    result.Id,
-                    result.Title,
-                    result.Description,
-                    result.StartTime,
-                    result.EndTime,
-                    result.IsCancelled,
-                    result.Version,
-                    result.Attendees
-                        .Select(attendee => new EventAttendeeResponse(
-                            attendee.Id,
-                            attendee.Name,
-                            attendee.EmailAddress,
-                            attendee.IsAttending))
-                        .ToArray()))
-                .ToArray());
-        }
-        catch (InvalidEventQueryException exception)
-        {
-            ModelState.AddModelError("dateRange", exception.Message);
-            return ValidationProblem(ModelState);
-        }
+        return Ok(results
+            .Select(result => new EventListItemResponse(
+                result.Id,
+                result.Title,
+                result.Description,
+                result.StartTime,
+                result.EndTime,
+                result.IsCancelled,
+                result.Version,
+                result.Attendees
+                    .Select(attendee => new EventAttendeeResponse(
+                        attendee.Id,
+                        attendee.Name,
+                        attendee.EmailAddress,
+                        attendee.IsAttending))
+                    .ToArray()))
+            .ToArray());
     }
 
     [HttpPut("{id:guid}")]
@@ -70,57 +61,42 @@ public sealed class EventsController(
         UpdateEventRequest request,
         CancellationToken cancellationToken)
     {
-        try
+        if (request.Attendees.Any(attendee => attendee is null))
         {
-            var result = await updateEventHandler.HandleAsync(
-                new UpdateEventCommand(
-                    id,
-                    request.Version,
-                    request.Title,
-                    request.Description,
-                    request.StartTime,
-                    request.EndTime,
-                    request.Attendees
-                        .Select(attendee => new UpdateAttendeeCommand(
-                            attendee.Name,
-                            attendee.EmailAddress,
-                            attendee.IsAttending))
-                        .ToArray()),
-                cancellationToken);
+            ModelState.AddModelError("attendees", "Attendees must not contain null entries.");
+            return ValidationProblem(ModelState);
+        }
 
-            return Ok(new UpdateEventResponse(
-                result.Id,
-                result.Title,
-                result.Description,
-                result.StartTime,
-                result.EndTime,
-                result.Version,
-                result.Attendees
-                    .Select(attendee => new UpdatedAttendeeResponse(
-                        attendee.Id,
+        var result = await updateEventHandler.HandleAsync(
+            new UpdateEventCommand(
+                id,
+                request.Version,
+                request.Title,
+                request.Description,
+                request.StartTime,
+                request.EndTime,
+                request.Attendees
+                    .Select(attendee => new UpdateAttendeeCommand(
                         attendee.Name,
                         attendee.EmailAddress,
                         attendee.IsAttending))
-                    .ToArray()));
-        }
-        catch (EventNotFoundException exception)
-        {
-            return NotFound(new ProblemDetails
-            {
-                Title = "Event not found",
-                Detail = exception.Message,
-                Status = StatusCodes.Status404NotFound
-            });
-        }
-        catch (DomainValidationException exception)
-        {
-            ModelState.AddModelError("event", exception.Message);
-            return ValidationProblem(ModelState);
-        }
-        catch (EventConcurrencyException exception)
-        {
-            return ConcurrencyConflict(exception);
-        }
+                    .ToArray()),
+            cancellationToken);
+
+        return Ok(new UpdateEventResponse(
+            result.Id,
+            result.Title,
+            result.Description,
+            result.StartTime,
+            result.EndTime,
+            result.Version,
+            result.Attendees
+                .Select(attendee => new UpdatedAttendeeResponse(
+                    attendee.Id,
+                    attendee.Name,
+                    attendee.EmailAddress,
+                    attendee.IsAttending))
+                .ToArray()));
     }
 
     [HttpPatch("{eventId:guid}/attendees/{attendeeId:guid}/attendance")]
@@ -134,36 +110,15 @@ public sealed class EventsController(
         SetAttendanceRequest request,
         CancellationToken cancellationToken)
     {
-        try
-        {
-            await setAttendanceHandler.HandleAsync(
-                new SetAttendanceCommand(
-                    eventId,
-                    attendeeId,
-                    request.IsAttending,
-                    request.Version),
-                cancellationToken);
+        await setAttendanceHandler.HandleAsync(
+            new SetAttendanceCommand(
+                eventId,
+                attendeeId,
+                request.IsAttending!.Value,
+                request.Version),
+            cancellationToken);
 
-            return NoContent();
-        }
-        catch (EventNotFoundException exception)
-        {
-            return NotFound(new ProblemDetails
-            {
-                Title = "Event not found",
-                Detail = exception.Message,
-                Status = StatusCodes.Status404NotFound
-            });
-        }
-        catch (DomainValidationException exception)
-        {
-            ModelState.AddModelError("event", exception.Message);
-            return ValidationProblem(ModelState);
-        }
-        catch (EventConcurrencyException exception)
-        {
-            return ConcurrencyConflict(exception);
-        }
+        return NoContent();
     }
 
     [HttpDelete("{id:guid}")]
@@ -174,24 +129,8 @@ public sealed class EventsController(
         Guid id,
         CancellationToken cancellationToken)
     {
-        try
-        {
-            await cancelEventHandler.HandleAsync(id, cancellationToken);
-            return NoContent();
-        }
-        catch (EventNotFoundException exception)
-        {
-            return NotFound(new ProblemDetails
-            {
-                Title = "Event not found",
-                Detail = exception.Message,
-                Status = StatusCodes.Status404NotFound
-            });
-        }
-        catch (EventConcurrencyException exception)
-        {
-            return ConcurrencyConflict(exception);
-        }
+        await cancelEventHandler.HandleAsync(id, cancellationToken);
+        return NoContent();
     }
 
     [HttpPost]
@@ -201,55 +140,42 @@ public sealed class EventsController(
         CreateEventRequest request,
         CancellationToken cancellationToken)
     {
-        try
+        if (request.Attendees.Any(attendee => attendee is null))
         {
-            var result = await createEventHandler.HandleAsync(
-                new CreateEventCommand(
-                    request.Title,
-                    request.Description,
-                    request.StartTime,
-                    request.EndTime,
-                    request.Attendees
-                        .Select(attendee => new CreateAttendeeCommand(
-                            attendee.Name,
-                            attendee.EmailAddress,
-                            attendee.IsAttending))
-                        .ToArray()),
-                cancellationToken);
+            ModelState.AddModelError("attendees", "Attendees must not contain null entries.");
+            return ValidationProblem(ModelState);
+        }
 
-            var response = new CreateEventResponse(
-                result.Id,
-                result.Title,
-                result.Description,
-                result.StartTime,
-                result.EndTime,
-                result.Version,
-                result.Attendees
-                    .Select(attendee => new CreatedAttendeeResponse(
-                        attendee.Id,
+        var result = await createEventHandler.HandleAsync(
+            new CreateEventCommand(
+                request.Title,
+                request.Description,
+                request.StartTime,
+                request.EndTime,
+                request.Attendees
+                    .Select(attendee => new CreateAttendeeCommand(
                         attendee.Name,
                         attendee.EmailAddress,
                         attendee.IsAttending))
-                    .ToArray());
+                    .ToArray()),
+            cancellationToken);
 
-            return StatusCode(StatusCodes.Status201Created, response);
-        }
-        catch (DomainValidationException exception)
-        {
-            ModelState.AddModelError("event", exception.Message);
-            return ValidationProblem(ModelState);
-        }
+        var response = new CreateEventResponse(
+            result.Id,
+            result.Title,
+            result.Description,
+            result.StartTime,
+            result.EndTime,
+            result.Version,
+            result.Attendees
+                .Select(attendee => new CreatedAttendeeResponse(
+                    attendee.Id,
+                    attendee.Name,
+                    attendee.EmailAddress,
+                    attendee.IsAttending))
+                .ToArray());
+
+        return StatusCode(StatusCodes.Status201Created, response);
     }
 
-    private ObjectResult ConcurrencyConflict(EventConcurrencyException exception)
-    {
-        return StatusCode(
-            StatusCodes.Status409Conflict,
-            new ProblemDetails
-            {
-                Title = "Event update conflict",
-                Detail = exception.Message,
-                Status = StatusCodes.Status409Conflict
-            });
-    }
 }

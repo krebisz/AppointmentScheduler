@@ -5,11 +5,14 @@ using AppointmentScheduler.Application.Events.List;
 using AppointmentScheduler.Application.Events.Update;
 using AppointmentScheduler.Infrastructure;
 using AppointmentScheduler.Infrastructure.Persistence;
+using AppointmentScheduler.Controllers;
 using Microsoft.EntityFrameworkCore;
 
 var builder = WebApplication.CreateBuilder(args);
 
 builder.Services.AddControllers();
+builder.Services.AddProblemDetails();
+builder.Services.AddExceptionHandler<ApiExceptionHandler>();
 builder.Services.AddOpenApi();
 builder.Services.AddScoped<CreateEventHandler>();
 builder.Services.AddScoped<ListEventsHandler>();
@@ -21,6 +24,13 @@ builder.Services.AddInfrastructure(
     ?? "Data Source=appointment-scheduler.db");
 
 var app = builder.Build();
+
+app.UseExceptionHandler();
+app.UseStatusCodePages(async statusContext =>
+{
+    await Results.Problem(statusCode: statusContext.HttpContext.Response.StatusCode)
+        .ExecuteAsync(statusContext.HttpContext);
+});
 
 if (app.Environment.IsDevelopment())
 {

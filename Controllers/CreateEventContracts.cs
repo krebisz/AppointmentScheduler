@@ -98,6 +98,7 @@ public sealed record UpdatedAttendeeResponse(
     bool IsAttending);
 
 public sealed record SetAttendanceRequest(
-    bool IsAttending,
+    [param: Required]
+    bool? IsAttending,
     [param: Range(1, long.MaxValue)]
     long Version);

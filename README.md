@@ -1,6 +1,16 @@
 # Doctorly calendar API
 
-Assessment implementation. See `ASSESSMENT.md` for the supplied brief and `WORKLOG.md` for current verified coverage and decisions.
+Assessment implementation for a doctor's-practice calendar API.
+
+## Reviewer guide
+
+This README is the entry point for building, running, using, and reviewing the solution. The supporting documents have distinct purposes:
+
+- [`NET Technical Test.pdf`](<NET Technical Test.pdf>) is the original assessment brief.
+- [`ASSESSMENT.md`](ASSESSMENT.md) is a searchable transcription of the brief and its email clarification; it contains requirements, not implementation claims.
+- [`WORKLOG.md`](WORKLOG.md) records prioritisation, assumptions, architectural decisions, verified results, deferred scope, and phase commit hashes.
+
+For a short technical review, run the commands below, open Swagger, then follow the create-event vertical slice described under **Architecture and repository structure**. `git log --oneline --reverse` shows the implementation sequence; the phase table in `WORKLOG.md` explains what each checkpoint delivered.
 
 ## Download and prerequisites
 
@@ -21,13 +31,13 @@ From the repository root:
     dotnet test AppointmentScheduler.slnx --no-build --no-restore
     dotnet run --project AppointmentScheduler.csproj --no-build --launch-profile http
 
-The verified result is a clean build and 22 passing tests. Keep the final command running and wait for:
+The verified result is a clean build and 56 passing tests. Keep the final command running and wait for:
 
     Now listening on: http://localhost:5158
 
 The API creates appointment-scheduler.db in the repository root on first run and retains data across restarts. The database and related SQLite files are ignored by Git.
 
-Because this assessment uses `EnsureCreated` rather than migrations, an older local database is not upgraded. If you ran an earlier schema, stop the API and remove `appointment-scheduler.db` once before restarting. A fresh clone needs no database step.
+Because this assessment uses `EnsureCreated` rather than migrations, an older local database is not upgraded. Backward compatibility is intentionally out of scope. If you ran an earlier schema, stop the API, back up any data you need, and remove the old database before restarting. Resetting the database discards its stored events. Alternatively, point the connection string at a new database file to retain the original untouched. A fresh clone needs no database step.
 
 Confirm the API is running with Postman, a browser, or another HTTP client:
 
@@ -123,7 +133,7 @@ An attendee response is represented by the existing `isAttending` boolean. Send 
       "version": 1
     }
 
-The endpoint returns HTTP 204. Read the event again to obtain its incremented version. This intentionally models only a simple accept/reject state, not invitation workflow, response history, or comments.
+The endpoint requires an explicit true or false response and a positive version; omitted or null attendance values return 400. It returns HTTP 204 on success. Read the event again to obtain the current version (unchanged if the attendance value was already the same). This intentionally models only a simple accept/reject state, not invitation workflow, response history, or comments.
 
 ## Notifications
 
@@ -131,11 +141,35 @@ After a create, update, or first cancellation is persisted, the application requ
 
 Notification publication occurs after persistence. Repeating an idempotent cancellation does not publish another notification. External delivery guarantees, retries, and transactional outbox behavior are not implemented.
 
+If publication throws after persistence, the API returns 500 but the saved event remains. A failed write response does not guarantee rollback: inspect stored data before retrying, especially after POST, which could otherwise create a duplicate.
+
+## Error responses
+
+Request errors use JSON `application/problem+json`. ASP.NET validation handles missing bodies/fields and malformed JSON; collection checks reject null attendees. One API exception handler maps domain/application exceptions and unexpected failures consistently:
+
+- 400: invalid inputs, date ranges, or domain rules (including unknown attendee membership).
+- 404: event or route not found.
+- 409: stale version or a conflicting database save.
+- 500: unexpected storage, application, or notification failure. The response is generic with a trace ID; details and the exception are logged server-side in both Development and Production.
+
+Infrastructure translates EF concurrency errors into the application conflict exception. Other failures propagate to the API handler; failed persistence prevents notification publication. Startup/database creation failures stop startup rather than exposing a running, unusable API.
+
 ## Tests
 
     dotnet test AppointmentScheduler.slnx
 
-Last verified: 22 passed, 0 failed, 0 skipped.
+Last verified: 56 passed, 0 failed, 0 skipped. Includes null/malformed inputs, expected errors, injected repository and save failures, post-save notification failure, and safe Production error responses.
+
+### Test methodology
+
+Tests are placed at the boundary where each risk is most useful to detect:
+
+- Domain tests exercise aggregate invariants and state transitions without framework setup.
+- Application tests use small fakes to verify orchestration, notification content, and save-before-publish ordering.
+- Infrastructure tests use SQLite rather than EF's in-memory provider so relational mapping, queries, constraints, and optimistic concurrency use the same provider as the application.
+- API tests use `WebApplicationFactory` to exercise routing, model validation, serialization, centralized error mapping, dependency injection, and persistence through HTTP.
+
+This mix keeps business-rule tests fast while retaining focused integration coverage for behavior that unit tests cannot prove. Failure-path tests inject repository, save, and notification failures to verify propagation and the public `ProblemDetails` contract.
 
 ## API contract
 
@@ -178,3 +212,31 @@ Override it without editing source by setting the standard .NET configuration va
 - Attendance is a single boolean per attendee; richer invitation workflows are outside the assessment scope.
 - Swagger UI is Development-only. Hosting public production documentation and generating/distributing a client package are deferred.
 - External notification delivery and retries/outbox behavior are not implemented.
+
+## Architecture and repository structure
+
+The solution uses four explicit boundaries with inward dependencies:
+
+    API -> Application <- Infrastructure
+               |
+             Domain
+
+- Root API project: `Program.cs` composes dependencies; `Controllers/` owns HTTP contracts, status codes, Swagger metadata, and centralized exception mapping.
+- `src/AppointmentScheduler.Domain`: the `CalendarEvent` aggregate owns attendees and enforces lifecycle and validation rules. It has no application, persistence, or HTTP dependency.
+- `src/AppointmentScheduler.Application`: use-case handlers orchestrate the aggregate through repository and notification interfaces. It depends only on Domain.
+- `src/AppointmentScheduler.Infrastructure`: EF Core/SQLite persistence and the simulated logging notification adapter implement Application interfaces.
+- `tests/AppointmentScheduler.Tests`: tests are grouped by Domain, Application, Infrastructure, and API to mirror the production boundaries.
+
+The main vertical slice demonstrates the complete dependency path without extra mediator or generic-repository machinery:
+
+    POST /api/events
+      -> EventsController and request contract
+      -> CreateEventHandler
+      -> CalendarEvent.Create and attendee invariants
+      -> IEventRepository / EfEventRepository
+      -> SchedulerDbContext / SQLite
+      -> notification port / structured-log adapter
+
+The key files for that walkthrough are [`EventsController.cs`](Controllers/EventsController.cs), [`CreateEventHandler.cs`](src/AppointmentScheduler.Application/Events/Create/CreateEventHandler.cs), [`CalendarEvent.cs`](src/AppointmentScheduler.Domain/Events/CalendarEvent.cs), [`EfEventRepository.cs`](src/AppointmentScheduler.Infrastructure/Persistence/EfEventRepository.cs), and [`CreateEventEndpointTests.cs`](tests/AppointmentScheduler.Tests/Api/CreateEventEndpointTests.cs).
+
+The same separation supports listing, updating, cancellation, attendance response, and concurrency handling. The detailed reasons and trade-offs, including SQLite, aggregate ownership, soft cancellation, UTC storage, notification timing, optimistic concurrency, and deferred features, are recorded in `WORKLOG.md`.

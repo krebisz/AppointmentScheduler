@@ -1,14 +1,14 @@
 # Worklog — Doctorly technical task
 
-Keep this a short live dashboard. Replace stale entries; report only verified outcomes. `ASSESSMENT.md` and the PDF define requirements.
+This is the reviewer-facing record of prioritisation, decisions, delivery sequence, verified evidence, and deferred scope. Replace stale entries rather than accumulating an agent transcript. `ASSESSMENT.md` and the PDF define requirements.
 
 ## Snapshot
 
 - Remaining budget: not re-estimated after Phase 5; preserve the final 30 minutes for handover
 - Environment/setup time lost: approximately 45 minutes to sandbox failures, Google Drive file locking/path issues, relocation, and repository realignment
-- Last verified: 2026-09-29 13:26 +02:00
+- Last verified: 2026-09-29 13:53 +02:00
 - Handover reserve: final 30 minutes
-- Current slice: lean Swagger UI, attendance response, and optimistic-concurrency demonstrations - verified by build/tests
+- Current slice: centralized API error handling and null-input regression coverage - verified by full solution tests
 - Next action: final runtime smoke, repository audit, and handover
 
 ## Coverage
@@ -24,7 +24,7 @@ Keep this a short live dashboard. Replace stale entries; report only verified ou
 | Must | List with filters | Verified | GET /api/events supports inclusive overlap filters using from/to and returns UTC start-time order. |
 | Must | Search events | Verified | The same endpoint supports case-insensitive title/description search, combinable with date filters. |
 | Must | Notification capability | Verified | Create, update, and first cancellation publish after persistence through an application port; infrastructure emits a simulated structured log without recipient addresses or external delivery. |
-| Must | Appropriate tests; runnable solution | Verified | 22 focused tests pass; solution builds with 0 warnings/errors. |
+| Must | Appropriate tests; runnable solution | Verified | 56 tests pass; solution compilation succeeds. |
 | Explicit design | EF or similar, storage, layering, interfaces, DDD patterns | Verified | Separate Domain, Application, Infrastructure and API projects/boundaries; EF Core SQLite repository implements the application port. |
 | Should | OpenAPI | Verified | Development document returned HTTP 200, OpenAPI 3.1.1, with /api/events. |
 | Should | Generated client | Deferred | OpenAPI JSON is available as generation input; generator/tooling and distributed client source were not added because they were disproportionate to the assessment slice. |
@@ -52,6 +52,7 @@ Keep this a short live dashboard. Replace stale entries; report only verified ou
 | Defer generated client tooling | The OpenAPI document is a valid future generator input, but selecting, configuring, compiling, and distributing a client adds disproportionate concepts for the remaining scope. No generated client is claimed. |
 | Numeric optimistic concurrency on the Event aggregate | Reuses one `Version` value across update and attendance writes. The application rejects stale client versions and EF Core detects a race at save time. This is deliberately simpler than ETags, merge/retry, or distributed locks. |
 | Attendance response is the existing attendee boolean | PATCH changes only `isAttending` and returns 204. It demonstrates accept/reject without inventing invitation workflow, response history, comments, or separate reservation entities. |
+| Test at the boundary where the risk lives | Domain tests cover invariants; application fakes cover orchestration and ordering; SQLite tests cover relational/provider behavior; `WebApplicationFactory` tests cover the real HTTP pipeline and error contract. This balances speed with confidence without repeating every assertion at every layer. |
 | Keep assessment artifacts; ignore unrelated/local/generated clutter | Phase checkpoints are committed on main. The precise ignore file covers build/IDE output, user files, SQLite databases, temporary PDF renders, and local agent guidance. |
 
 ### Phase 4 notification design
@@ -67,6 +68,11 @@ Keep this a short live dashboard. Replace stale entries; report only verified ou
 | Explicitly deferred | External delivery, delivery-failure policy, channel preferences, templates, retries, deduplication, delivery records, and a transactional outbox are outside this assessment slice. These can be added behind the established boundary if production reliability is required. |
 
 ### 80/20 scope boundary
+
+- User explicitly excluded backward compatibility: the temporary schema-upgrade implementation and test were removed. EnsureCreated supports fresh databases only; existing data was not changed or deleted.
+- Expected exceptions map centrally in ApiExceptionHandler to 400/404/409; unexpected failures are logged with a trace ID and return a generic 500 ProblemDetails in all environments. Controllers retain request validation and HTTP mapping, with no repeated exception catches.
+- Null attendee elements return 400; required fields/collections/bodies use API validation. Attendance PATCH requires an explicit boolean response so omitted/null values cannot silently reject.
+- Persistence errors propagate and prevent notification publication. A publisher error after persistence propagates as 500 without rolling back saved data; no automatic retry or outbox is claimed.
 
 - Swagger UI is human documentation, not a generated client; the client requirement remains explicitly deferred.
 - Concurrency demonstrates detection and a clear 409 response, not conflict resolution.
@@ -91,14 +97,15 @@ This is the agreed working plan, not a change to the employer's priorities. Adju
 | Command / request | Observed result |
 | --- | --- |
 | dotnet clean -> restore -> build AppointmentScheduler.slnx | Passed from clean output; all projects restored, 0 warnings, 0 errors. |
-| dotnet test AppointmentScheduler.slnx --no-build --no-restore | Passed; 22 passed, 0 failed, 0 skipped. |
+| dotnet test AppointmentScheduler.slnx --no-restore | Passed after compiling all projects; 56 passed, 0 failed, 0 skipped. |
+| Error regression tests | Safe 500 responses across all five API operations; 400 for null/missing/malformed inputs; 404 for missing events/routes; save conflicts 409; failed saves do not publish; publisher failure leaves persisted data; Production errors contain no internal exception details. |
 | Lean optional-feature tests | Swagger UI returned 200; attendee PATCH persisted its boolean response; stale API update returned 409; two EF writers caused the second save to raise the mapped concurrency exception. |
 | dotnet run --project AppointmentScheduler.csproj --no-build --launch-profile http | Started cleanly in Development on http://localhost:5158 using a fresh disposable SQLite database; GET /api/events returned HTTP 200 with an empty array. |
 | Fresh-database HTTP lifecycle smoke on port 5170 | Invalid create 400; create 201; combined overlap filter/search 200 with one match; update 200; inverted range 400; cancel 204 then 204; default list empty; includeCancelled returned the cancelled event; cancelled update 400; unknown cancel 404. |
 | Runtime notification logs | Exactly one simulated Created, Updated, and Cancelled log appeared after the corresponding EF writes; the repeated cancellation emitted no duplicate. |
 | GET /openapi/v1.json | HTTP 200; OpenAPI 3.1.1 document contains /api/events. |
 | Fresh-database lean feature smoke on port 5160 | Swagger UI 200; create version 1; attendance PATCH 204 and persisted true at version 2; first update 200; repeated stale update 409. |
-| Reviewer README audit | Clean-download prerequisites, exact restore/build/test/run commands, configured port, endpoint examples, version workflow, SQLite reset/configuration, Swagger/OpenAPI URLs, and troubleshooting were checked against the verified project configuration. |
+| Reviewer documentation audit | README is the entry point and links the original brief, requirements transcription, and worklog. Usage, architecture/dependency direction, repository layout, create-event vertical slice, direct source links, test methodology, phase commits, scope, and limitations were checked against the project files and verified behavior. |
 | Repository audit | No tracked build/database artifacts or obvious secret patterns found; the existing ignored development database was left untouched and the disposable smoke database was removed. |
 
 ## Time and priorities
@@ -118,7 +125,7 @@ Record each checkpoint only after its commit is verified in Git.
 | 3 | Update and cancel with lifecycle tests | Complete | 6d08132 - Implement event update and cancellation |
 | 4 | Minimal observable notifications with tests | Complete | d8636d9 - Add a minimal observable notification boundary and infrastructure implementation |
 | 5 | Must-set stabilization and full smoke verification | Ready to commit | |
-| 6 | Lean Swagger UI, attendee response, and optimistic concurrency | Ready to commit | |
+| 6 | Lean Swagger UI, attendee response, and optimistic concurrency | Complete | 2e620c0 - Add lean concurrency, attendance responses, and Swagger documentation |
 | 7 | Final documentation, Git audit, commit/push, and submission preparation | Pending | |
 
 ## Handover
@@ -128,5 +135,5 @@ Record each checkpoint only after its commit is verified in Git.
 - Deferred Should/Could items: generated client, production documentation hosting, richer invitation workflow, automatic conflict resolution, availability checks
 - Known limitations: startup uses EnsureCreated rather than migrations; existing development databases must be recreated after schema changes; list results are not paginated; validation errors use one event-level domain error key
 - AI assistance: Phase 1-5 code/tests/documentation drafted with AI; clean build, tests, SQLite persistence, complete HTTP lifecycle behavior, simulated notification logging, OpenAPI output, reviewer startup, and repository hygiene executed locally
-- Git status, final commit, remote/link: Phase 4 committed as d8636d9 on main and matches origin/main; reviewer-startup, documentation, and lean optional-feature changes are uncommitted
+- Git status, final commit, remote/link: latest local commit verified as 2e620c0; centralized error handling, null validation, regression tests, and updated documentation remain uncommitted. Remote state not rechecked this turn.
 - Commit-note clarification: the Phase 4 commit subject mentions failure handling, but the streamlined implementation intentionally defers external delivery-failure policy as documented above
