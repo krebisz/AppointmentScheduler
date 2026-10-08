@@ -11,6 +11,8 @@ public sealed class CancelEventHandler(
         CancelEventCommand command,
         CancellationToken cancellationToken)
     {
+        ArgumentNullException.ThrowIfNull(command);
+
         var calendarEvent = await eventRepository.GetByIdAsync(
             command.EventId,
             cancellationToken)
@@ -23,7 +25,7 @@ public sealed class CancelEventHandler(
 
         await eventRepository.SaveChangesAsync(cancellationToken);
         await eventNotificationPublisher.PublishAsync(
-            EventNotification.From(calendarEvent, EventNotificationType.Cancelled),
+            EventNotification.FromEvent(calendarEvent, EventNotificationType.Cancelled),
             cancellationToken);
     }
 }

@@ -7,13 +7,11 @@ namespace AppointmentScheduler.Infrastructure.Events.Persistence;
 
 internal sealed class CalendarEventConfiguration : IEntityTypeConfiguration<CalendarEvent>
 {
-    public void Configure(EntityTypeBuilder<CalendarEvent> builder)
+    public void Configure(EntityTypeBuilder<CalendarEvent> eventBuilder)
     {
         var utcTicksConverter = new ValueConverter<DateTimeOffset, long>(
             value => value.UtcTicks,
             value => new DateTimeOffset(value, TimeSpan.Zero));
-
-        var eventBuilder = builder;
 
         eventBuilder.ToTable("Events");
         eventBuilder.HasKey(calendarEvent => calendarEvent.Id);
@@ -45,10 +43,10 @@ internal sealed class CalendarEventConfiguration : IEntityTypeConfiguration<Cale
                 attendeeBuilder.HasKey(attendee => attendee.Id);
                 attendeeBuilder.Property(attendee => attendee.Id).ValueGeneratedNever();
                 attendeeBuilder.Property(attendee => attendee.Name)
-                    .HasMaxLength(CalendarEvent.AttendeeNameMaxLength)
+                    .HasMaxLength(Attendee.NameMaxLength)
                     .IsRequired();
                 attendeeBuilder.Property(attendee => attendee.EmailAddress)
-                    .HasMaxLength(CalendarEvent.EmailAddressMaxLength)
+                    .HasMaxLength(Attendee.EmailAddressMaxLength)
                     .IsRequired();
                 attendeeBuilder.Property(attendee => attendee.IsAttending).IsRequired();
                 attendeeBuilder.HasIndex("EventId", nameof(Attendee.EmailAddress))

@@ -5,4 +5,4 @@ public sealed record CreateEventCommand(
     string Description,
     DateTimeOffset StartTime,
     DateTimeOffset EndTime,
-    IReadOnlyCollection<CreateAttendeeCommand> Attendees);
+    IReadOnlyCollection<CreateAttendeeInput> Attendees);

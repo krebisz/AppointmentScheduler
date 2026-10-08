@@ -1,9 +1,13 @@
 using System.Net.Mail;
+using AppointmentScheduler.Domain.Events.Validation;
 
 namespace AppointmentScheduler.Domain.Events;
 
 public sealed class Attendee
 {
+    public const int NameMaxLength = 200;
+    public const int EmailAddressMaxLength = 320;
+
     private Attendee()
     {
     }
@@ -26,14 +30,14 @@ public sealed class Attendee
 
     internal static Attendee Create(AttendeeDetails details)
     {
-        var name = CalendarEvent.RequiredText(
+        var name = RequiredTextValidator.ValidateAndNormalize(
             details.Name,
             nameof(details.Name),
-            CalendarEvent.AttendeeNameMaxLength);
-        var emailAddress = CalendarEvent.RequiredText(
+            NameMaxLength);
+        var emailAddress = RequiredTextValidator.ValidateAndNormalize(
             details.EmailAddress,
             nameof(details.EmailAddress),
-            CalendarEvent.EmailAddressMaxLength);
+            EmailAddressMaxLength);
 
         if (!MailAddress.TryCreate(emailAddress, out var parsedAddress)
             || !string.Equals(parsedAddress.Address, emailAddress, StringComparison.OrdinalIgnoreCase))
@@ -47,5 +51,21 @@ public sealed class Attendee
     internal void SetAttendance(bool isAttending)
     {
         IsAttending = isAttending;
+    }
+
+    internal static Attendee CreateReplacement(AttendeeUpdateDetails details, Attendee? existing)
+    {
+        // Retain existing IDs and omitted attendance; additions get new IDs and default to false.
+        var replacement = Create(new AttendeeDetails(
+            details.Name, details.EmailAddress, details.IsAttending ?? existing?.IsAttending ?? false));
+        if (existing is not null) replacement.Id = existing.Id;
+        return replacement;
+    }
+
+    internal void ApplyReplacement(Attendee replacement)
+    {
+        Name = replacement.Name;
+        EmailAddress = replacement.EmailAddress;
+        IsAttending = replacement.IsAttending;
     }
 }

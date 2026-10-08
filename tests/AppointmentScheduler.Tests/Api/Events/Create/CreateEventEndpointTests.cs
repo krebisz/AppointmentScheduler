@@ -9,11 +9,11 @@ using Xunit;
 
 namespace AppointmentScheduler.Tests.Api.Events.Create;
 
-public sealed class CreateEventEndpointTests(ApiFactory factory)
-    : IClassFixture<ApiFactory>
+public sealed class CreateEventEndpointTests(AppointmentSchedulerApiFactory factory)
+    : IClassFixture<AppointmentSchedulerApiFactory>
 {
     [Fact]
-    public async Task Post_creates_event_and_returns_created_response()
+    public async Task Post_creates_event_and_returns_created_responseAsync()
     {
         using var client = factory.CreateClient();
 
@@ -35,7 +35,7 @@ public sealed class CreateEventEndpointTests(ApiFactory factory)
     }
 
     [Fact]
-    public async Task Post_rejects_invalid_time_range_without_persisting()
+    public async Task Post_rejects_invalid_time_range_without_persistingAsync()
     {
         using var client = factory.CreateClient();
         var valid = ValidRequest();
@@ -47,7 +47,7 @@ public sealed class CreateEventEndpointTests(ApiFactory factory)
     }
 
     [Fact]
-    public async Task Swagger_ui_is_available_in_development()
+    public async Task Swagger_ui_is_available_in_developmentAsync()
     {
         using var client = factory.CreateClient();
 

@@ -5,10 +5,11 @@ namespace AppointmentScheduler.Api.Events.Update;
 
 public sealed record UpdateAttendeeRequest(
     [param: Required]
-    [param: StringLength(CalendarEvent.AttendeeNameMaxLength)]
+    [param: StringLength(Attendee.NameMaxLength)]
     string Name,
     [param: Required]
-    [param: StringLength(CalendarEvent.EmailAddressMaxLength)]
+    [param: StringLength(Attendee.EmailAddressMaxLength)]
     [param: EmailAddress]
     string EmailAddress,
-    bool IsAttending);
+    bool? IsAttending = null,
+    Guid? Id = null);

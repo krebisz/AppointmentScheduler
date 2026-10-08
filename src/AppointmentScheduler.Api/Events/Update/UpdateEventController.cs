@@ -14,7 +14,7 @@ public sealed class UpdateEventController(UpdateEventHandler updateEventHandler)
     [ProducesResponseType<ValidationProblemDetails>(StatusCodes.Status400BadRequest)]
     [ProducesResponseType<ProblemDetails>(StatusCodes.Status404NotFound)]
     [ProducesResponseType<ProblemDetails>(StatusCodes.Status409Conflict)]
-    public async Task<ActionResult<UpdateEventResponse>> Update(
+    public async Task<ActionResult<UpdateEventResponse>> UpdateAsync(
         Guid id,
         UpdateEventRequest request,
         CancellationToken cancellationToken)
@@ -34,10 +34,11 @@ public sealed class UpdateEventController(UpdateEventHandler updateEventHandler)
                 request.StartTime,
                 request.EndTime,
                 request.Attendees
-                    .Select(attendee => new UpdateAttendeeCommand(
+                    .Select(attendee => new UpdateAttendeeInput(
                         attendee.Name,
                         attendee.EmailAddress,
-                        attendee.IsAttending))
+                        attendee.IsAttending,
+                        attendee.Id))
                     .ToArray()),
             cancellationToken);
 
@@ -49,7 +50,7 @@ public sealed class UpdateEventController(UpdateEventHandler updateEventHandler)
             result.EndTime,
             result.Version,
             result.Attendees
-                .Select(attendee => new UpdatedAttendeeResponse(
+                .Select(attendee => new UpdateAttendeeResponse(
                     attendee.Id,
                     attendee.Name,
                     attendee.EmailAddress,

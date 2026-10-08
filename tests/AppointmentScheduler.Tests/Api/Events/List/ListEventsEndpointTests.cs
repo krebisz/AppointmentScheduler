@@ -9,11 +9,11 @@ using Xunit;
 
 namespace AppointmentScheduler.Tests.Api.Events.List;
 
-public sealed class ListEventsEndpointTests(ApiFactory factory)
-    : IClassFixture<ApiFactory>
+public sealed class ListEventsEndpointTests(AppointmentSchedulerApiFactory factory)
+    : IClassFixture<AppointmentSchedulerApiFactory>
 {
     [Fact]
-    public async Task Get_filters_events_that_overlap_the_requested_utc_range()
+    public async Task Get_filters_events_that_overlap_the_requested_utc_rangeAsync()
     {
         using var client = factory.CreateClient();
         await CreateEventAsync(
@@ -35,7 +35,7 @@ public sealed class ListEventsEndpointTests(ApiFactory factory)
             "2030-01-01T11:00:00Z",
             "2030-01-01T11:30:00Z");
 
-        var events = await client.GetFromJsonAsync<EventListItemResponse[]>(
+        var events = await client.GetFromJsonAsync<ListEventItemResponse[]>(
             "/api/events?from=2030-01-01T09:30:00Z&to=2030-01-01T10:30:00Z");
 
         var calendarEvent = Assert.Single(events!);
@@ -44,7 +44,7 @@ public sealed class ListEventsEndpointTests(ApiFactory factory)
     }
 
     [Fact]
-    public async Task Get_searches_title_and_description_case_insensitively()
+    public async Task Get_searches_title_and_description_case_insensitivelyAsync()
     {
         using var client = factory.CreateClient();
         await CreateEventAsync(
@@ -66,7 +66,7 @@ public sealed class ListEventsEndpointTests(ApiFactory factory)
             "2040-01-01T11:00:00Z",
             "2040-01-01T11:30:00Z");
 
-        var events = await client.GetFromJsonAsync<EventListItemResponse[]>(
+        var events = await client.GetFromJsonAsync<ListEventItemResponse[]>(
             "/api/events?search=cardiology");
 
         Assert.NotNull(events);
@@ -76,7 +76,7 @@ public sealed class ListEventsEndpointTests(ApiFactory factory)
     }
 
     [Fact]
-    public async Task Get_rejects_an_inverted_date_range()
+    public async Task Get_rejects_an_inverted_date_rangeAsync()
     {
         using var client = factory.CreateClient();
 

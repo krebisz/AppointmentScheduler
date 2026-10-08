@@ -1,11 +1,11 @@
+using AppointmentScheduler.Domain.Events.Validation;
+
 namespace AppointmentScheduler.Domain.Events;
 
 public sealed class CalendarEvent
 {
     public const int TitleMaxLength = 200;
     public const int DescriptionMaxLength = 2_000;
-    public const int AttendeeNameMaxLength = 200;
-    public const int EmailAddressMaxLength = 320;
 
     private readonly List<Attendee> _attendees = [];
 
@@ -58,7 +58,7 @@ public sealed class CalendarEvent
             description,
             startTime,
             endTime,
-            attendees);
+            attendees?.Select(Attendee.Create));
 
         return new CalendarEvent(
             Guid.NewGuid(),
@@ -74,26 +74,51 @@ public sealed class CalendarEvent
         string description,
         DateTimeOffset startTime,
         DateTimeOffset endTime,
-        IEnumerable<AttendeeDetails> attendees)
+        IEnumerable<AttendeeUpdateDetails> attendees)
     {
         if (IsCancelled)
         {
             throw new DomainValidationException("A cancelled event cannot be updated.");
         }
 
+        var existingAttendees = _attendees.ToDictionary(attendee => attendee.Id);
+        var suppliedIds = new HashSet<Guid>();
+        var replacements = attendees?.Select(replacement =>
+        {
+            if (replacement is null)
+                throw new DomainValidationException("Attendees must not contain null entries.");
+            Attendee? existing = null;
+            if (replacement.AttendeeId is Guid attendeeId)
+            {
+                if (!suppliedIds.Add(attendeeId))
+                    throw new DomainValidationException("Attendee IDs must be unique.");
+                if (!existingAttendees.TryGetValue(attendeeId, out existing))
+                    throw new DomainValidationException("The attendee does not belong to this event.");
+            }
+            return Attendee.CreateReplacement(replacement, existing);
+        });
+
         var details = ValidateDetails(
             title,
             description,
             startTime,
             endTime,
-            attendees);
+            replacements);
+
+        // All replacements and event fields are now valid. Retain tracked instances for existing IDs.
+        var reconciledAttendees = details.Attendees.Select(replacement =>
+        {
+            if (!existingAttendees.TryGetValue(replacement.Id, out var existing)) return replacement;
+            existing.ApplyReplacement(replacement);
+            return existing;
+        }).ToArray();
 
         Title = details.Title;
         Description = details.Description;
         StartTime = details.StartTime;
         EndTime = details.EndTime;
         _attendees.Clear();
-        _attendees.AddRange(details.Attendees);
+        _attendees.AddRange(reconciledAttendees);
         Version++;
     }
 
@@ -136,10 +161,10 @@ public sealed class CalendarEvent
         string description,
         DateTimeOffset startTime,
         DateTimeOffset endTime,
-        IEnumerable<AttendeeDetails> attendees)
+        IEnumerable<Attendee>? attendees)
     {
-        var normalizedTitle = RequiredText(title, nameof(title), TitleMaxLength);
-        var normalizedDescription = RequiredText(
+        var normalizedTitle = RequiredTextValidator.ValidateAndNormalize(title, nameof(title), TitleMaxLength);
+        var normalizedDescription = RequiredTextValidator.ValidateAndNormalize(
             description,
             nameof(description),
             DescriptionMaxLength);
@@ -152,7 +177,6 @@ public sealed class CalendarEvent
         }
 
         var attendeeList = attendees?
-            .Select(Attendee.Create)
             .ToList()
             ?? throw new DomainValidationException("At least one attendee is required.");
 
@@ -174,23 +198,6 @@ public sealed class CalendarEvent
             utcStart,
             utcEnd,
             attendeeList);
-    }
-
-    internal static string RequiredText(string value, string fieldName, int maxLength)
-    {
-        if (string.IsNullOrWhiteSpace(value))
-        {
-            throw new DomainValidationException($"{fieldName} is required.");
-        }
-
-        var normalized = value.Trim();
-        if (normalized.Length > maxLength)
-        {
-            throw new DomainValidationException(
-                $"{fieldName} cannot exceed {maxLength} characters.");
-        }
-
-        return normalized;
     }
 
     private sealed record ValidatedEventDetails(

@@ -1,6 +1,6 @@
 namespace AppointmentScheduler.Application.Events.Update;
 
-public sealed record UpdatedAttendeeResult(
+public sealed record UpdateAttendeeResult(
     Guid Id,
     string Name,
     string EmailAddress,

@@ -25,13 +25,14 @@ public sealed class ErrorHandlingTests
 
     [Theory]
     [InlineData("GET", "/api/events")]
+    [InlineData("GET", "/api/events/11111111-1111-1111-1111-111111111111")]
     [InlineData("POST", "/api/events")]
     [InlineData("PUT", "/api/events/11111111-1111-1111-1111-111111111111")]
     [InlineData("DELETE", "/api/events/11111111-1111-1111-1111-111111111111")]
     [InlineData("PATCH", "/api/events/11111111-1111-1111-1111-111111111111/attendees/22222222-2222-2222-2222-222222222222/attendance")]
-    public async Task Unexpected_repository_errors_are_safe_problem_responses(string method, string path)
+    public async Task Unexpected_repository_errors_are_safe_problem_responsesAsync(string method, string path)
     {
-        using var factory = new ApiFactory();
+        using var factory = new AppointmentSchedulerApiFactory();
         using var faulty = factory.WithWebHostBuilder(builder => builder.ConfigureServices(services =>
         {
             services.RemoveAll<IEventRepository>();
@@ -43,7 +44,7 @@ public sealed class ErrorHandlingTests
             request.Content = new StringContent(method == "PATCH"
                 ? """{"version":1,"isAttending":true}""" : ValidBody, Encoding.UTF8, "application/json");
         var response = await client.SendAsync(request);
-        await AssertProblem(response, HttpStatusCode.InternalServerError);
+        await AssertProblemAsync(response, HttpStatusCode.InternalServerError);
         var body = await response.Content.ReadAsStringAsync();
         Assert.DoesNotContain("private database failure", body);
         Assert.DoesNotContain("stack", body, StringComparison.OrdinalIgnoreCase);
@@ -59,21 +60,21 @@ public sealed class ErrorHandlingTests
     [InlineData("POST", "/api/events", "{}", HttpStatusCode.BadRequest)]
     [InlineData("POST", "/api/events", "null", HttpStatusCode.BadRequest)]
     [InlineData("POST", "/api/events", "", HttpStatusCode.BadRequest)]
-    public async Task Expected_errors_return_problem_json(string method, string path, string body, HttpStatusCode expected)
+    public async Task Expected_errors_return_problem_jsonAsync(string method, string path, string body, HttpStatusCode expected)
     {
-        using var factory = new ApiFactory();
+        using var factory = new AppointmentSchedulerApiFactory();
         using var client = factory.CreateClient();
         using var request = new HttpRequestMessage(new HttpMethod(method), path);
         if (method == "POST") request.Content = new StringContent(body, Encoding.UTF8, "application/json");
-        await AssertProblem(await client.SendAsync(request), expected);
+        await AssertProblemAsync(await client.SendAsync(request), expected);
     }
 
     [Theory]
     [InlineData("POST", "/api/events")]
     [InlineData("PUT", "/api/events/11111111-1111-1111-1111-111111111111")]
-    public async Task Null_attendee_entries_are_validation_errors(string method, string path)
+    public async Task Null_attendee_entries_are_validation_errorsAsync(string method, string path)
     {
-        using var factory = new ApiFactory();
+        using var factory = new AppointmentSchedulerApiFactory();
         using var client = factory.CreateClient();
         var body = ValidBody.Replace(
             """[{"name":"Alex","emailAddress":"alex@example.com","isAttending":false}]""", "[null]");
@@ -81,7 +82,7 @@ public sealed class ErrorHandlingTests
         {
             Content = new StringContent(body, Encoding.UTF8, "application/json")
         };
-        await AssertProblem(await client.SendAsync(request), HttpStatusCode.BadRequest);
+        await AssertProblemAsync(await client.SendAsync(request), HttpStatusCode.BadRequest);
     }
 
     [Theory]
@@ -89,9 +90,9 @@ public sealed class ErrorHandlingTests
     [InlineData("POST", "/api/events", "[]")]
     [InlineData("PUT", "/api/events/11111111-1111-1111-1111-111111111111", "null")]
     [InlineData("PUT", "/api/events/11111111-1111-1111-1111-111111111111", "[]")]
-    public async Task Null_or_empty_attendee_collections_are_validation_errors(string method, string path, string attendees)
+    public async Task Null_or_empty_attendee_collections_are_validation_errorsAsync(string method, string path, string attendees)
     {
-        using var factory = new ApiFactory();
+        using var factory = new AppointmentSchedulerApiFactory();
         using var client = factory.CreateClient();
         var body = ValidBody.Replace(
             """[{"name":"Alex","emailAddress":"alex@example.com","isAttending":false}]""", attendees);
@@ -99,13 +100,13 @@ public sealed class ErrorHandlingTests
         {
             Content = new StringContent(body, Encoding.UTF8, "application/json")
         };
-        await AssertProblem(await client.SendAsync(request), HttpStatusCode.BadRequest);
+        await AssertProblemAsync(await client.SendAsync(request), HttpStatusCode.BadRequest);
     }
 
     [Fact]
-    public async Task Notification_failure_propagates_as_500_after_data_has_been_saved()
+    public async Task Notification_failure_propagates_as_500_after_data_has_been_savedAsync()
     {
-        using var factory = new ApiFactory();
+        using var factory = new AppointmentSchedulerApiFactory();
         using var faulty = factory.WithWebHostBuilder(builder => builder.ConfigureServices(services =>
         {
             services.RemoveAll<IEventNotificationPublisher>();
@@ -113,23 +114,64 @@ public sealed class ErrorHandlingTests
         }));
         using var client = faulty.CreateClient();
         var response = await client.PostAsync("/api/events", new StringContent(ValidBody, Encoding.UTF8, "application/json"));
-        await AssertProblem(response, HttpStatusCode.InternalServerError);
+        await AssertProblemAsync(response, HttpStatusCode.InternalServerError);
         using var scope = faulty.Services.CreateScope();
-        Assert.Equal(1, await scope.ServiceProvider.GetRequiredService<SchedulerDbContext>().Events.CountAsync());
+        var stored = await scope.ServiceProvider.GetRequiredService<SchedulerDbContext>().Events
+            .Include(calendarEvent => calendarEvent.Attendees).SingleAsync();
+        Assert.Equal("Error test", stored.Title);
+        Assert.Equal(1, stored.Version);
+        Assert.Equal("alex@example.com", Assert.Single(stored.Attendees).EmailAddress);
     }
 
     [Theory]
     [InlineData("""{"version":1}""")]
     [InlineData("""{"version":1,"isAttending":null}""")]
     [InlineData("""{"version":0,"isAttending":true}""")]
-    public async Task Attendance_requires_an_explicit_response_and_valid_version(string body)
+    public async Task Attendance_requires_an_explicit_response_and_valid_versionAsync(string body)
     {
-        using var factory = new ApiFactory();
+        using var factory = new AppointmentSchedulerApiFactory();
         using var client = factory.CreateClient();
         var response = await client.PatchAsync(
             "/api/events/11111111-1111-1111-1111-111111111111/attendees/22222222-2222-2222-2222-222222222222/attendance",
             new StringContent(body, Encoding.UTF8, "application/json"));
-        await AssertProblem(response, HttpStatusCode.BadRequest);
+        await AssertProblemAsync(response, HttpStatusCode.BadRequest);
+    }
+
+    [Fact]
+    public async Task Update_publication_failure_does_not_undo_successful_identity_reconciliationAsync()
+    {
+        using var factory = new AppointmentSchedulerApiFactory();
+        using var faulty = factory.WithWebHostBuilder(builder => builder.ConfigureServices(services =>
+        {
+            services.RemoveAll<IEventNotificationPublisher>();
+            services.AddScoped<IEventNotificationPublisher, FailingPublisher>();
+        }));
+        using var client = faulty.CreateClient();
+        var calendarEvent = CalendarEvent.Create("Original", "Test",
+            DateTimeOffset.Parse("2077-01-01T09:00:00Z"), DateTimeOffset.Parse("2077-01-01T10:00:00Z"),
+            [new AttendeeDetails("Alex", "alex@example.com", true)]);
+        var attendeeId = calendarEvent.Attendees.Single().Id;
+        await using (var setup = faulty.Services.CreateAsyncScope())
+        {
+            var context = setup.ServiceProvider.GetRequiredService<SchedulerDbContext>();
+            context.Events.Add(calendarEvent);
+            await context.SaveChangesAsync();
+        }
+        var body = System.Text.Json.Nodes.JsonNode.Parse(ValidBody)!;
+        body["attendees"]![0]!["id"] = attendeeId;
+        body["attendees"]![0]!["emailAddress"] = "updated@example.com";
+        using var response = await client.PutAsync($"/api/events/{calendarEvent.Id}",
+            new StringContent(body.ToJsonString(), Encoding.UTF8, "application/json"));
+        await AssertProblemAsync(response, HttpStatusCode.InternalServerError);
+        await using var verification = faulty.Services.CreateAsyncScope();
+        var stored = await verification.ServiceProvider.GetRequiredService<SchedulerDbContext>().Events
+            .Include(item => item.Attendees).SingleAsync();
+        Assert.Equal("Error test", stored.Title);
+        Assert.Equal(2, stored.Version);
+        var attendee = Assert.Single(stored.Attendees);
+        Assert.Equal(attendeeId, attendee.Id);
+        Assert.Equal("updated@example.com", attendee.EmailAddress);
+        Assert.False(attendee.IsAttending);
     }
 
     [Theory]
@@ -137,22 +179,22 @@ public sealed class ErrorHandlingTests
     [InlineData("description", false)]
     [InlineData("name", true)]
     [InlineData("emailAddress", true)]
-    public async Task Null_required_fields_are_validation_errors(string property, bool nested)
+    public async Task Null_required_fields_are_validation_errorsAsync(string property, bool nested)
     {
-        using var factory = new ApiFactory();
+        using var factory = new AppointmentSchedulerApiFactory();
         using var client = factory.CreateClient();
         var body = System.Text.Json.Nodes.JsonNode.Parse(ValidBody)!;
         var target = nested ? body["attendees"]![0]! : body;
         target[property] = null;
-        await AssertProblem(await client.PostAsync("/api/events",
+        await AssertProblemAsync(await client.PostAsync("/api/events",
             new StringContent(body.ToJsonString(), Encoding.UTF8, "application/json")),
             HttpStatusCode.BadRequest);
     }
 
     [Fact]
-    public async Task Production_errors_are_also_safe_problem_responses()
+    public async Task Production_errors_are_also_safe_problem_responsesAsync()
     {
-        using var factory = new ApiFactory();
+        using var factory = new AppointmentSchedulerApiFactory();
         using var faulty = factory.WithWebHostBuilder(builder =>
         {
             builder.UseEnvironment("Production");
@@ -167,11 +209,11 @@ public sealed class ErrorHandlingTests
             BaseAddress = new Uri("https://localhost")
         });
         var response = await client.GetAsync("/api/events");
-        await AssertProblem(response, HttpStatusCode.InternalServerError);
+        await AssertProblemAsync(response, HttpStatusCode.InternalServerError);
         Assert.DoesNotContain("private database failure", await response.Content.ReadAsStringAsync());
     }
 
-    private static async Task AssertProblem(HttpResponseMessage response, HttpStatusCode expected)
+    private static async Task AssertProblemAsync(HttpResponseMessage response, HttpStatusCode expected)
     {
         Assert.Equal(expected, response.StatusCode);
         Assert.Equal("application/problem+json", response.Content.Headers.ContentType?.MediaType);
@@ -188,13 +230,13 @@ public sealed class ErrorHandlingTests
     [InlineData("PUT", true)]
     [InlineData("DELETE", true)]
     [InlineData("PATCH", true)]
-    public async Task Save_failures_propagate_without_publishing_notifications(string method, bool conflict)
+    public async Task Save_failures_propagate_without_publishing_notificationsAsync(string method, bool conflict)
     {
         var calendarEvent = CalendarEvent.Create("Save test", "Test",
             DateTimeOffset.UtcNow, DateTimeOffset.UtcNow.AddHours(1),
             [new AttendeeDetails("Alex", "alex@example.com", false)]);
         var publisher = new CountingPublisher();
-        using var factory = new ApiFactory();
+        using var factory = new AppointmentSchedulerApiFactory();
         using var faulty = factory.WithWebHostBuilder(builder => builder.ConfigureServices(services =>
         {
             services.RemoveAll<IEventRepository>();
@@ -209,7 +251,7 @@ public sealed class ErrorHandlingTests
         if (method != "DELETE")
             request.Content = new StringContent(method == "PATCH"
                 ? """{"version":1,"isAttending":true}""" : ValidBody, Encoding.UTF8, "application/json");
-        await AssertProblem(await client.SendAsync(request),
+        await AssertProblemAsync(await client.SendAsync(request),
             conflict ? HttpStatusCode.Conflict : HttpStatusCode.InternalServerError);
         Assert.Equal(0, publisher.Calls);
     }
@@ -226,7 +268,7 @@ public sealed class ErrorHandlingTests
 
     private sealed class SaveFailingRepository(CalendarEvent calendarEvent, bool conflict) : IEventRepository
     {
-        public Task AddAsync(CalendarEvent value, CancellationToken cancellationToken)
+        public Task AddAndSaveAsync(CalendarEvent value, CancellationToken cancellationToken)
             => throw new NotSupportedException();
         public Task<CalendarEvent?> GetByIdAsync(Guid id, CancellationToken cancellationToken)
             => Task.FromResult<CalendarEvent?>(calendarEvent);
@@ -246,7 +288,7 @@ public sealed class ErrorHandlingTests
 
     private sealed class FailingRepository : IEventRepository
     {
-        public Task AddAsync(CalendarEvent calendarEvent, CancellationToken cancellationToken)
+        public Task AddAndSaveAsync(CalendarEvent calendarEvent, CancellationToken cancellationToken)
             => throw new InvalidOperationException("private database failure");
         public Task<CalendarEvent?> GetByIdAsync(Guid id, CancellationToken cancellationToken)
             => throw new InvalidOperationException("private database failure");

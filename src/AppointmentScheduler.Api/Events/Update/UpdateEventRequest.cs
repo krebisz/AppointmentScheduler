@@ -1,4 +1,5 @@
 using System.ComponentModel.DataAnnotations;
+using System.Text.Json.Serialization;
 using AppointmentScheduler.Domain.Events;
 
 namespace AppointmentScheduler.Api.Events.Update;
@@ -12,7 +13,9 @@ public sealed record UpdateEventRequest(
     [param: Required]
     [param: StringLength(CalendarEvent.DescriptionMaxLength)]
     string Description,
+    [property: JsonRequired]
     DateTimeOffset StartTime,
+    [property: JsonRequired]
     DateTimeOffset EndTime,
     [param: Required]
     [param: MinLength(1)]

@@ -1,6 +1,6 @@
-namespace AppointmentScheduler.Api.Events.List;
+namespace AppointmentScheduler.Api.Events.Get;
 
-public sealed record EventListItemResponse(
+public sealed record GetEventResponse(
     Guid Id,
     string Title,
     string Description,
@@ -8,4 +8,4 @@ public sealed record EventListItemResponse(
     DateTimeOffset EndTime,
     bool IsCancelled,
     long Version,
-    IReadOnlyCollection<EventAttendeeResponse> Attendees);
+    IReadOnlyCollection<GetAttendeeResponse> Attendees);

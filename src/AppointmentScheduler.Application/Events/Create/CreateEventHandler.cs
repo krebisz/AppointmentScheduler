@@ -24,9 +24,9 @@ public sealed class CreateEventHandler(
                 attendee.EmailAddress,
                 attendee.IsAttending)));
 
-        await eventRepository.AddAsync(calendarEvent, cancellationToken);
+        await eventRepository.AddAndSaveAsync(calendarEvent, cancellationToken);
         await eventNotificationPublisher.PublishAsync(
-            EventNotification.From(calendarEvent, EventNotificationType.Created),
+            EventNotification.FromEvent(calendarEvent, EventNotificationType.Created),
             cancellationToken);
 
         return new CreateEventResult(
@@ -37,7 +37,7 @@ public sealed class CreateEventHandler(
             calendarEvent.EndTime,
             calendarEvent.Version,
             calendarEvent.Attendees
-                .Select(attendee => new CreatedAttendeeResult(
+                .Select(attendee => new CreateAttendeeResult(
                     attendee.Id,
                     attendee.Name,
                     attendee.EmailAddress,

@@ -7,4 +7,4 @@ public sealed record CreateEventResponse(
     DateTimeOffset StartTime,
     DateTimeOffset EndTime,
     long Version,
-    IReadOnlyCollection<CreatedAttendeeResponse> Attendees);
+    IReadOnlyCollection<CreateAttendeeResponse> Attendees);

@@ -8,10 +8,10 @@ using Xunit;
 
 namespace AppointmentScheduler.Tests.Infrastructure.Events.Persistence;
 
-public sealed class EventConcurrencyTests
+public sealed class EfEventRepositoryConcurrencyTests
 {
     [Fact]
-    public async Task Save_rejects_the_second_writer_loaded_at_the_same_version()
+    public async Task Save_rejects_the_second_writer_loaded_at_the_same_versionAsync()
     {
         await using var connection = new SqliteConnection("Data Source=:memory:");
         await connection.OpenAsync();
@@ -29,9 +29,9 @@ public sealed class EventConcurrencyTests
 
         await using (var setupContext = new SchedulerDbContext(options))
         {
-            await setupContext.Database.EnsureCreatedAsync();
+            await SchedulerDatabaseInitializer.InitializeAsync(setupContext);
             await new EfEventRepository(setupContext)
-                .AddAsync(calendarEvent, CancellationToken.None);
+                .AddAndSaveAsync(calendarEvent, CancellationToken.None);
         }
 
         await using var firstContext = new SchedulerDbContext(options);

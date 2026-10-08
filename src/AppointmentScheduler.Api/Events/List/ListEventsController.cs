@@ -10,10 +10,10 @@ namespace AppointmentScheduler.Api.Events.List;
 public sealed class ListEventsController(ListEventsHandler listEventsHandler) : ControllerBase
 {
     [HttpGet]
-    [ProducesResponseType<IReadOnlyCollection<EventListItemResponse>>(
+    [ProducesResponseType<IReadOnlyCollection<ListEventItemResponse>>(
         StatusCodes.Status200OK)]
     [ProducesResponseType<ValidationProblemDetails>(StatusCodes.Status400BadRequest)]
-    public async Task<ActionResult<IReadOnlyCollection<EventListItemResponse>>> List(
+    public async Task<ActionResult<IReadOnlyCollection<ListEventItemResponse>>> ListAsync(
         [FromQuery] DateTimeOffset? from,
         [FromQuery] DateTimeOffset? to,
         [FromQuery] string? search,
@@ -25,7 +25,7 @@ public sealed class ListEventsController(ListEventsHandler listEventsHandler) : 
             cancellationToken);
 
         return Ok(results
-            .Select(result => new EventListItemResponse(
+            .Select(result => new ListEventItemResponse(
                 result.Id,
                 result.Title,
                 result.Description,
@@ -34,7 +34,7 @@ public sealed class ListEventsController(ListEventsHandler listEventsHandler) : 
                 result.IsCancelled,
                 result.Version,
                 result.Attendees
-                    .Select(attendee => new EventAttendeeResponse(
+                    .Select(attendee => new ListAttendeeResponse(
                         attendee.Id,
                         attendee.Name,
                         attendee.EmailAddress,

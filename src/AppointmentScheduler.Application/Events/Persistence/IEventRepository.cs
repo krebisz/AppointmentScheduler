@@ -4,7 +4,7 @@ namespace AppointmentScheduler.Application.Events.Persistence;
 
 public interface IEventRepository
 {
-    Task AddAsync(CalendarEvent calendarEvent, CancellationToken cancellationToken);
+    Task AddAndSaveAsync(CalendarEvent calendarEvent, CancellationToken cancellationToken);
 
     Task<CalendarEvent?> GetByIdAsync(
         Guid id,

@@ -4,7 +4,7 @@ namespace AppointmentScheduler.Application.Events.List;
 
 public sealed class ListEventsHandler(IEventRepository eventRepository)
 {
-    public async Task<IReadOnlyList<ListedEventResult>> HandleAsync(
+    public async Task<IReadOnlyList<ListEventItemResult>> HandleAsync(
         ListEventsQuery query,
         CancellationToken cancellationToken)
     {
@@ -27,7 +27,7 @@ public sealed class ListEventsHandler(IEventRepository eventRepository)
             cancellationToken);
 
         return events
-            .Select(calendarEvent => new ListedEventResult(
+            .Select(calendarEvent => new ListEventItemResult(
                 calendarEvent.Id,
                 calendarEvent.Title,
                 calendarEvent.Description,
@@ -36,7 +36,7 @@ public sealed class ListEventsHandler(IEventRepository eventRepository)
                 calendarEvent.IsCancelled,
                 calendarEvent.Version,
                 calendarEvent.Attendees
-                    .Select(attendee => new ListedAttendeeResult(
+                    .Select(attendee => new ListAttendeeResult(
                         attendee.Id,
                         attendee.Name,
                         attendee.EmailAddress,

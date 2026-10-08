@@ -8,7 +8,7 @@ using Microsoft.Extensions.DependencyInjection.Extensions;
 
 namespace AppointmentScheduler.Tests.Api;
 
-public sealed class ApiFactory : WebApplicationFactory<Program>
+public sealed class AppointmentSchedulerApiFactory : WebApplicationFactory<Program>
 {
     private readonly string _databasePath =
         Path.Combine(Path.GetTempPath(), $"appointment-scheduler-tests-{Guid.NewGuid():N}.db");

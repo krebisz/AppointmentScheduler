@@ -8,7 +8,7 @@ namespace AppointmentScheduler.Tests.Infrastructure.Events.Notifications;
 public sealed class LoggingEventNotificationPublisherTests
 {
     [Fact]
-    public async Task Publish_writes_an_observable_simulated_delivery_without_recipient_addresses()
+    public async Task Publish_writes_an_observable_simulated_delivery_without_recipient_addressesAsync()
     {
         var logger = new RecordingLogger<LoggingEventNotificationPublisher>();
         var publisher = new LoggingEventNotificationPublisher(logger);

@@ -7,4 +7,4 @@ public sealed record CreateEventResult(
     DateTimeOffset StartTime,
     DateTimeOffset EndTime,
     long Version,
-    IReadOnlyCollection<CreatedAttendeeResult> Attendees);
+    IReadOnlyCollection<CreateAttendeeResult> Attendees);

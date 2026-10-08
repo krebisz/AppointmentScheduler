@@ -4,4 +4,4 @@ public sealed record SetAttendanceCommand(
     Guid EventId,
     Guid AttendeeId,
     bool IsAttending,
-    long Version);
+    long ExpectedVersion);

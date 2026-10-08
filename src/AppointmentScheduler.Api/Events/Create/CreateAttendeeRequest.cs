@@ -5,10 +5,10 @@ namespace AppointmentScheduler.Api.Events.Create;
 
 public sealed record CreateAttendeeRequest(
     [param: Required]
-    [param: StringLength(CalendarEvent.AttendeeNameMaxLength)]
+    [param: StringLength(Attendee.NameMaxLength)]
     string Name,
     [param: Required]
-    [param: StringLength(CalendarEvent.EmailAddressMaxLength)]
+    [param: StringLength(Attendee.EmailAddressMaxLength)]
     [param: EmailAddress]
     string EmailAddress,
     bool IsAttending);

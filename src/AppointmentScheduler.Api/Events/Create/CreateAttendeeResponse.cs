@@ -1,6 +1,6 @@
 namespace AppointmentScheduler.Api.Events.Create;
 
-public sealed record CreatedAttendeeResponse(
+public sealed record CreateAttendeeResponse(
     Guid Id,
     string Name,
     string EmailAddress,

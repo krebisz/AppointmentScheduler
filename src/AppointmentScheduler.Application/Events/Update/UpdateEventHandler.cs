@@ -15,15 +15,15 @@ public sealed class UpdateEventHandler(
         ArgumentNullException.ThrowIfNull(command);
 
         var calendarEvent = await eventRepository.GetByIdAsync(
-            command.Id,
+            command.EventId,
             cancellationToken)
-            ?? throw new EventNotFoundException(command.Id);
+            ?? throw new EventNotFoundException(command.EventId);
 
-        if (command.Version != calendarEvent.Version)
+        if (command.ExpectedVersion != calendarEvent.Version)
         {
             throw new EventConcurrencyException(
                 calendarEvent.Id,
-                command.Version,
+                command.ExpectedVersion,
                 calendarEvent.Version);
         }
 
@@ -32,14 +32,15 @@ public sealed class UpdateEventHandler(
             command.Description,
             command.StartTime,
             command.EndTime,
-            command.Attendees.Select(attendee => new AttendeeDetails(
+            command.Attendees.Select(attendee => new AttendeeUpdateDetails(
                 attendee.Name,
                 attendee.EmailAddress,
-                attendee.IsAttending)));
+                attendee.IsAttending,
+                attendee.AttendeeId)));
 
         await eventRepository.SaveChangesAsync(cancellationToken);
         await eventNotificationPublisher.PublishAsync(
-            EventNotification.From(calendarEvent, EventNotificationType.Updated),
+            EventNotification.FromEvent(calendarEvent, EventNotificationType.Updated),
             cancellationToken);
 
         return new UpdateEventResult(
@@ -50,7 +51,7 @@ public sealed class UpdateEventHandler(
             calendarEvent.EndTime,
             calendarEvent.Version,
             calendarEvent.Attendees
-                .Select(attendee => new UpdatedAttendeeResult(
+                .Select(attendee => new UpdateAttendeeResult(
                     attendee.Id,
                     attendee.Name,
                     attendee.EmailAddress,

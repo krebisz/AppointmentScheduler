@@ -8,7 +8,7 @@ namespace AppointmentScheduler.Infrastructure.Events.Persistence;
 
 public sealed class EfEventRepository(SchedulerDbContext dbContext) : IEventRepository
 {
-    public async Task AddAsync(
+    public async Task AddAndSaveAsync(
         CalendarEvent calendarEvent,
         CancellationToken cancellationToken)
     {
@@ -70,7 +70,37 @@ public sealed class EfEventRepository(SchedulerDbContext dbContext) : IEventRepo
     {
         try
         {
-            await dbContext.SaveChangesAsync(cancellationToken);
+            dbContext.ChangeTracker.DetectChanges();
+            var emailChanges = dbContext.ChangeTracker.Entries<Attendee>()
+                .Where(entry => entry.State == EntityState.Modified
+                    && entry.Property(attendee => attendee.EmailAddress).IsModified)
+                .Select(entry => (
+                    Property: entry.Property(attendee => attendee.EmailAddress),
+                    FinalEmail: entry.Property(attendee => attendee.EmailAddress).CurrentValue))
+                .ToArray();
+            if (emailChanges.Length == 0)
+            {
+                await dbContext.SaveChangesAsync(cancellationToken);
+                return;
+            }
+
+            // Stage changed emails in one transaction so SQLite's immediate unique index permits swaps.
+            await using var transaction = await dbContext.Database.BeginTransactionAsync(cancellationToken);
+            try
+            {
+                foreach (var change in emailChanges)
+                    change.Property.CurrentValue = $"{Guid.NewGuid():N}@scheduler.invalid";
+                await dbContext.SaveChangesAsync(cancellationToken);
+                foreach (var change in emailChanges)
+                    change.Property.CurrentValue = change.FinalEmail;
+                await dbContext.SaveChangesAsync(cancellationToken);
+                await transaction.CommitAsync(cancellationToken);
+            }
+            finally
+            {
+                foreach (var change in emailChanges)
+                    change.Property.CurrentValue = change.FinalEmail;
+            }
         }
         catch (DbUpdateConcurrencyException exception)
         {

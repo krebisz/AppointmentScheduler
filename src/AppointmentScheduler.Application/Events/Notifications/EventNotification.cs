@@ -10,7 +10,7 @@ public sealed record EventNotification(
     DateTimeOffset EndTime,
     IReadOnlyCollection<string> RecipientEmailAddresses)
 {
-    public static EventNotification From(
+    public static EventNotification FromEvent(
         CalendarEvent calendarEvent,
         EventNotificationType type)
     {

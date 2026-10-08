@@ -56,7 +56,7 @@ public sealed class CalendarEventTests
             "Updated description",
             start.AddHours(1),
             start.AddHours(2),
-            [new AttendeeDetails("New Patient", "new@example.com", true)]);
+            [new AttendeeUpdateDetails("New Patient", "new@example.com", true)]);
 
         Assert.Equal("Updated", calendarEvent.Title);
         Assert.Equal(start.AddHours(1), calendarEvent.StartTime);
@@ -84,7 +84,7 @@ public sealed class CalendarEventTests
                 "Updated description",
                 start,
                 start.AddHours(1),
-                [new AttendeeDetails("Alex Patient", "alex@example.com", true)]));
+                [new AttendeeUpdateDetails("Alex Patient", "alex@example.com", true)]));
 
         Assert.Equal("A cancelled event cannot be updated.", exception.Message);
     }

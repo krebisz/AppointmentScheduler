@@ -9,11 +9,11 @@ using Xunit;
 
 namespace AppointmentScheduler.Tests.Api.Events;
 
-public sealed class EventLifecycleEndpointTests(ApiFactory factory)
-    : IClassFixture<ApiFactory>
+public sealed class EventLifecycleEndpointTests(AppointmentSchedulerApiFactory factory)
+    : IClassFixture<AppointmentSchedulerApiFactory>
 {
     [Fact]
-    public async Task Put_replaces_event_details_and_attendees()
+    public async Task Put_replaces_event_details_and_attendeesAsync()
     {
         using var client = factory.CreateClient();
         var created = await CreateEventAsync(
@@ -51,7 +51,7 @@ public sealed class EventLifecycleEndpointTests(ApiFactory factory)
         Assert.Equal("new@example.com", attendee.EmailAddress);
         Assert.True(attendee.IsAttending);
 
-        var listed = await client.GetFromJsonAsync<EventListItemResponse[]>(
+        var listed = await client.GetFromJsonAsync<ListEventItemResponse[]>(
             "/api/events?search=updated");
         var listedEvent = Assert.Single(listed!);
         Assert.Equal(created.Id, listedEvent.Id);
@@ -59,7 +59,7 @@ public sealed class EventLifecycleEndpointTests(ApiFactory factory)
     }
 
     [Fact]
-    public async Task Delete_soft_cancels_and_is_idempotent()
+    public async Task Delete_soft_cancels_and_is_idempotentAsync()
     {
         using var client = factory.CreateClient();
         var created = await CreateEventAsync(
@@ -75,18 +75,18 @@ public sealed class EventLifecycleEndpointTests(ApiFactory factory)
         Assert.Equal(HttpStatusCode.NoContent, firstDelete.StatusCode);
         Assert.Equal(HttpStatusCode.NoContent, secondDelete.StatusCode);
 
-        var activeEvents = await client.GetFromJsonAsync<EventListItemResponse[]>(
+        var activeEvents = await client.GetFromJsonAsync<ListEventItemResponse[]>(
             "/api/events?search=Cancellation%20candidate");
         Assert.Empty(activeEvents!);
 
-        var allEvents = await client.GetFromJsonAsync<EventListItemResponse[]>(
+        var allEvents = await client.GetFromJsonAsync<ListEventItemResponse[]>(
             "/api/events?search=Cancellation%20candidate&includeCancelled=true");
         var cancelledEvent = Assert.Single(allEvents!);
         Assert.True(cancelledEvent.IsCancelled);
     }
 
     [Fact]
-    public async Task Put_returns_conflict_when_the_supplied_version_is_stale()
+    public async Task Put_returns_conflict_when_the_supplied_version_is_staleAsync()
     {
         using var client = factory.CreateClient();
         var created = await CreateEventAsync(
@@ -125,7 +125,7 @@ public sealed class EventLifecycleEndpointTests(ApiFactory factory)
     }
 
     [Fact]
-    public async Task Patch_attendance_updates_the_attendee_and_event_version()
+    public async Task Patch_attendance_updates_the_attendee_and_event_versionAsync()
     {
         using var client = factory.CreateClient();
         var created = await CreateEventAsync(
@@ -146,7 +146,7 @@ public sealed class EventLifecycleEndpointTests(ApiFactory factory)
 
         Assert.Equal(HttpStatusCode.NoContent, response.StatusCode);
 
-        var events = await client.GetFromJsonAsync<EventListItemResponse[]>(
+        var events = await client.GetFromJsonAsync<ListEventItemResponse[]>(
             "/api/events?search=Attendance%20candidate");
         var listedEvent = Assert.Single(events!);
         Assert.True(Assert.Single(listedEvent.Attendees).IsAttending);
@@ -154,7 +154,7 @@ public sealed class EventLifecycleEndpointTests(ApiFactory factory)
     }
 
     [Fact]
-    public async Task Put_and_delete_return_not_found_for_an_unknown_event()
+    public async Task Put_and_delete_return_not_found_for_an_unknown_eventAsync()
     {
         using var client = factory.CreateClient();
         var id = Guid.NewGuid();

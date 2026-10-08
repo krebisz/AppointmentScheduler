@@ -13,7 +13,7 @@ public sealed class CancelEventController(CancelEventHandler cancelEventHandler)
     [ProducesResponseType(StatusCodes.Status204NoContent)]
     [ProducesResponseType<ProblemDetails>(StatusCodes.Status404NotFound)]
     [ProducesResponseType<ProblemDetails>(StatusCodes.Status409Conflict)]
-    public async Task<IActionResult> Cancel(
+    public async Task<IActionResult> CancelAsync(
         Guid id,
         CancellationToken cancellationToken)
     {

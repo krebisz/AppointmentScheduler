@@ -18,11 +18,11 @@ public sealed class SetAttendanceHandler(
             cancellationToken)
             ?? throw new EventNotFoundException(command.EventId);
 
-        if (command.Version != calendarEvent.Version)
+        if (command.ExpectedVersion != calendarEvent.Version)
         {
             throw new EventConcurrencyException(
                 calendarEvent.Id,
-                command.Version,
+                command.ExpectedVersion,
                 calendarEvent.Version);
         }
 
@@ -34,7 +34,7 @@ public sealed class SetAttendanceHandler(
         {
             await eventRepository.SaveChangesAsync(cancellationToken);
             await eventNotificationPublisher.PublishAsync(
-                EventNotification.From(
+                EventNotification.FromEvent(
                     calendarEvent,
                     EventNotificationType.Updated),
                 cancellationToken);

@@ -15,7 +15,7 @@ public sealed class EventNotificationTests
         new(2026, 10, 1, 9, 0, 0, TimeSpan.Zero);
 
     [Fact]
-    public async Task Create_publishes_to_attendees_after_persistence()
+    public async Task Create_publishes_to_attendees_after_persistenceAsync()
     {
         var calls = new List<string>();
         var repository = new RecordingEventRepository(calls);
@@ -28,7 +28,7 @@ public sealed class EventNotificationTests
                 "Annual review",
                 StartTime,
                 StartTime.AddMinutes(30),
-                [new CreateAttendeeCommand("Alex Patient", "alex@example.com", false)]),
+                [new CreateAttendeeInput("Alex Patient", "alex@example.com", false)]),
             CancellationToken.None);
 
         Assert.Equal(["save", "publish"], calls);
@@ -39,7 +39,7 @@ public sealed class EventNotificationTests
     }
 
     [Fact]
-    public async Task Update_publishes_updated_details_and_recipients_after_persistence()
+    public async Task Update_publishes_updated_details_and_recipients_after_persistenceAsync()
     {
         var calls = new List<string>();
         var calendarEvent = CreateEvent();
@@ -55,7 +55,7 @@ public sealed class EventNotificationTests
                 "Updated description",
                 StartTime.AddHours(1),
                 StartTime.AddHours(2),
-                [new UpdateAttendeeCommand("New Patient", "new@example.com", true)]),
+                [new UpdateAttendeeInput("New Patient", "new@example.com", true)]),
             CancellationToken.None);
 
         Assert.Equal(["save", "publish"], calls);
@@ -66,7 +66,7 @@ public sealed class EventNotificationTests
     }
 
     [Fact]
-    public async Task Cancel_publishes_only_for_the_first_state_transition()
+    public async Task Cancel_publishes_only_for_the_first_state_transitionAsync()
     {
         var calls = new List<string>();
         var calendarEvent = CreateEvent();
@@ -114,7 +114,7 @@ public sealed class EventNotificationTests
     {
         public CalendarEvent? CalendarEvent { get; private set; } = calendarEvent;
 
-        public Task AddAsync(
+        public Task AddAndSaveAsync(
             CalendarEvent calendarEvent,
             CancellationToken cancellationToken)
         {

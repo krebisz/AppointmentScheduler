@@ -1,6 +1,6 @@
-namespace AppointmentScheduler.Application.Events.List;
+namespace AppointmentScheduler.Application.Events.Get;
 
-public sealed record ListedEventResult(
+public sealed record GetEventResult(
     Guid Id,
     string Title,
     string Description,
@@ -8,4 +8,4 @@ public sealed record ListedEventResult(
     DateTimeOffset EndTime,
     bool IsCancelled,
     long Version,
-    IReadOnlyCollection<ListedAttendeeResult> Attendees);
+    IReadOnlyCollection<GetAttendeeResult> Attendees);

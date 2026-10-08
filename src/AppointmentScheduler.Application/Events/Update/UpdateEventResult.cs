@@ -7,4 +7,4 @@ public sealed record UpdateEventResult(
     DateTimeOffset StartTime,
     DateTimeOffset EndTime,
     long Version,
-    IReadOnlyCollection<UpdatedAttendeeResult> Attendees);
+    IReadOnlyCollection<UpdateAttendeeResult> Attendees);

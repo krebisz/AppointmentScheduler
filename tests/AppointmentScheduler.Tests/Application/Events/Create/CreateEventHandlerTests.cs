@@ -11,7 +11,7 @@ namespace AppointmentScheduler.Tests.Application.Events.Create;
 public sealed class CreateEventHandlerTests
 {
     [Fact]
-    public async Task Handle_persists_event_and_owned_attendee_to_sqlite()
+    public async Task Handle_persists_event_and_owned_attendee_to_sqliteAsync()
     {
         await using var connection = new SqliteConnection("Data Source=:memory:");
         await connection.OpenAsync();
@@ -22,7 +22,7 @@ public sealed class CreateEventHandlerTests
 
         await using (var setupContext = new SchedulerDbContext(options))
         {
-            await setupContext.Database.EnsureCreatedAsync();
+            await SchedulerDatabaseInitializer.InitializeAsync(setupContext);
 
             var handler = new CreateEventHandler(
                 new EfEventRepository(setupContext),
@@ -33,7 +33,7 @@ public sealed class CreateEventHandlerTests
                     "Annual review",
                     new DateTimeOffset(2026, 10, 1, 9, 0, 0, TimeSpan.FromHours(2)),
                     new DateTimeOffset(2026, 10, 1, 9, 30, 0, TimeSpan.FromHours(2)),
-                    [new CreateAttendeeCommand("Alex Patient", "alex@example.com", false)]),
+                    [new CreateAttendeeInput("Alex Patient", "alex@example.com", false)]),
                 CancellationToken.None);
 
             Assert.NotEqual(Guid.Empty, result.Id);

@@ -2,20 +2,27 @@ using AppointmentScheduler.Application.Events.Cancel;
 using AppointmentScheduler.Application.Events.Create;
 using AppointmentScheduler.Application.Events.Attendance;
 using AppointmentScheduler.Application.Events.List;
+using AppointmentScheduler.Application.Events.Get;
 using AppointmentScheduler.Application.Events.Update;
 using AppointmentScheduler.Infrastructure;
 using AppointmentScheduler.Infrastructure.Persistence;
 using AppointmentScheduler.Api.ErrorHandling;
-using Microsoft.EntityFrameworkCore;
+using AppointmentScheduler.Api.OpenApi;
+using AppointmentScheduler.Api.Events.Update;
 
 var builder = WebApplication.CreateBuilder(args);
 
 builder.Services.AddControllers();
 builder.Services.AddProblemDetails();
 builder.Services.AddExceptionHandler<ApiExceptionHandler>();
-builder.Services.AddOpenApi();
+builder.Services.AddOpenApi(options =>
+{
+    options.AddOperationTransformer<EventOpenApiOperationTransformer>();
+    options.AddSchemaTransformer<UpdateEventSchemaTransformer>();
+});
 builder.Services.AddScoped<CreateEventHandler>();
 builder.Services.AddScoped<ListEventsHandler>();
+builder.Services.AddScoped<GetEventHandler>();
 builder.Services.AddScoped<UpdateEventHandler>();
 builder.Services.AddScoped<CancelEventHandler>();
 builder.Services.AddScoped<SetAttendanceHandler>();
@@ -56,7 +63,7 @@ app.MapControllers();
 await using (var scope = app.Services.CreateAsyncScope())
 {
     var dbContext = scope.ServiceProvider.GetRequiredService<SchedulerDbContext>();
-    await dbContext.Database.EnsureCreatedAsync();
+    await SchedulerDatabaseInitializer.InitializeAsync(dbContext);
 }
 
 app.Run();
