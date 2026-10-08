@@ -1,5 +1,5 @@
 <Solution>
-  <Project Path="AppointmentScheduler.csproj" />
+  <Project Path="src/AppointmentScheduler.Api/AppointmentScheduler.Api.csproj" />
   <Project Path="src/AppointmentScheduler.Application/AppointmentScheduler.Application.csproj" />
   <Project Path="src/AppointmentScheduler.Domain/AppointmentScheduler.Domain.csproj" />
   <Project Path="src/AppointmentScheduler.Infrastructure/AppointmentScheduler.Infrastructure.csproj" />

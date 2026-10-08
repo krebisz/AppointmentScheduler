@@ -29,7 +29,7 @@ From the repository root:
     dotnet restore AppointmentScheduler.slnx
     dotnet build AppointmentScheduler.slnx --no-restore
     dotnet test AppointmentScheduler.slnx --no-build --no-restore
-    dotnet run --project AppointmentScheduler.csproj --no-build --launch-profile http
+    dotnet run --project src/AppointmentScheduler.Api/AppointmentScheduler.Api.csproj --no-build --launch-profile http
 
 The verified result is a clean build and 56 passing tests. Keep the final command running and wait for:
 
@@ -189,9 +189,9 @@ A generated third-party client is intentionally deferred. The OpenAPI JSON remai
 
 The default connection string is in `appsettings.json`:
 
-    Data Source=appointment-scheduler.db
+    Data Source=../../appointment-scheduler.db
 
-Override it without editing source by setting the standard .NET configuration variable `ConnectionStrings__SchedulerDatabase`. The default HTTP launch profile sets `ASPNETCORE_ENVIRONMENT=Development`, which enables OpenAPI and Swagger UI.
+The relative path is resolved from the API project directory during `dotnet run`, so the existing repository-root database is retained. For another working directory or deployment, set an explicit database path. Override it without editing source by setting the standard .NET configuration variable `ConnectionStrings__SchedulerDatabase`. The default HTTP launch profile sets `ASPNETCORE_ENVIRONMENT=Development`, which enables OpenAPI and Swagger UI.
 
 ## Troubleshooting
 
@@ -205,7 +205,7 @@ Override it without editing source by setting the standard .NET configuration va
 - Domain owns the Event aggregate, attendees, and invariants.
 - Application orchestrates lifecycle use cases through repository and channel-neutral notification ports.
 - Infrastructure implements those ports using EF Core 10.0.12 with SQLite and an in-process structured-log notification adapter.
-- The root API project owns HTTP contracts, controllers, and dependency injection.
+- `src/AppointmentScheduler.Api` owns HTTP contracts, controllers, and dependency injection.
 - Database creation currently uses EnsureCreated rather than migrations.
 - Same-event writes use a small optimistic-concurrency mechanism: clients send the latest numeric version and stale writes return HTTP 409; EF Core also checks the version while saving.
 - Concurrency handling does not attempt automatic retries, merging, ETags, distributed coordination, or conflict history.
@@ -221,7 +221,7 @@ The solution uses four explicit boundaries with inward dependencies:
                |
              Domain
 
-- Root API project: `Program.cs` composes dependencies; `Controllers/` owns HTTP contracts, status codes, Swagger metadata, and centralized exception mapping.
+- `src/AppointmentScheduler.Api`: `Program.cs` composes dependencies; `Controllers/` owns routes and response mapping, `Events/<UseCase>/` owns HTTP contracts, and `ErrorHandling/` owns centralized exception mapping.
 - `src/AppointmentScheduler.Domain`: the `CalendarEvent` aggregate owns attendees and enforces lifecycle and validation rules. It has no application, persistence, or HTTP dependency.
 - `src/AppointmentScheduler.Application`: use-case handlers orchestrate the aggregate through repository and notification interfaces. It depends only on Domain.
 - `src/AppointmentScheduler.Infrastructure`: EF Core/SQLite persistence and the simulated logging notification adapter implement Application interfaces.
@@ -237,6 +237,10 @@ The main vertical slice demonstrates the complete dependency path without extra 
       -> SchedulerDbContext / SQLite
       -> notification port / structured-log adapter
 
-The key files for that walkthrough are [`EventsController.cs`](Controllers/EventsController.cs), [`CreateEventHandler.cs`](src/AppointmentScheduler.Application/Events/Create/CreateEventHandler.cs), [`CalendarEvent.cs`](src/AppointmentScheduler.Domain/Events/CalendarEvent.cs), [`EfEventRepository.cs`](src/AppointmentScheduler.Infrastructure/Persistence/EfEventRepository.cs), and [`CreateEventEndpointTests.cs`](tests/AppointmentScheduler.Tests/Api/CreateEventEndpointTests.cs).
+The key files for that walkthrough are [`EventsController.cs`](src/AppointmentScheduler.Api/Controllers/EventsController.cs), [`CreateEventHandler.cs`](src/AppointmentScheduler.Application/Events/Create/CreateEventHandler.cs), [`CalendarEvent.cs`](src/AppointmentScheduler.Domain/Events/CalendarEvent.cs), [`EfEventRepository.cs`](src/AppointmentScheduler.Infrastructure/Persistence/EfEventRepository.cs), and [`CreateEventEndpointTests.cs`](tests/AppointmentScheduler.Tests/Api/Events/Create/CreateEventEndpointTests.cs).
 
 The same separation supports listing, updating, cancellation, attendance response, and concurrency handling. The detailed reasons and trade-offs, including SQLite, aggregate ownership, soft cancellation, UTC storage, notification timing, optimistic concurrency, and deferred features, are recorded in `WORKLOG.md`.
+
+## Refactor navigation and diagrams
+
+See [REFACTORING.md](REFACTORING.md) for the old-to-new path/namespace map, compatibility evidence, and diagram regeneration instructions. `CodeMap1.dgml` is a stale generated snapshot; use current source as the authority.

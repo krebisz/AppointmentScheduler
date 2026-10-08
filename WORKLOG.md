@@ -4,12 +4,12 @@ This is the reviewer-facing record of prioritisation, decisions, delivery sequen
 
 ## Snapshot
 
-- Remaining budget: not re-estimated after Phase 5; preserve the final 30 minutes for handover
-- Environment/setup time lost: approximately 45 minutes to sandbox failures, Google Drive file locking/path issues, relocation, and repository realignment
-- Last verified: 2026-09-29 13:53 +02:00
-- Handover reserve: final 30 minutes
-- Current slice: centralized API error handling and null-input regression coverage - verified by full solution tests
-- Next action: final runtime smoke, repository audit, and handover
+- Last verified: 2026-10-08, organisation refactor
+- SDK: 10.0.401; target framework and dependency versions retained
+- Current slice: feature organisation and one hand-authored top-level type per file
+- Outcome: API host relocated and renamed; existing 56 tests retained and passing
+- Scope: behaviour preserved; no backlog or correctness changes, commit, push, or publication
+- Existing untracked documentation and IDE state preserved; documentation paths updated
 
 ## Coverage
 
@@ -100,7 +100,7 @@ This is the agreed working plan, not a change to the employer's priorities. Adju
 | dotnet test AppointmentScheduler.slnx --no-restore | Passed after compiling all projects; 56 passed, 0 failed, 0 skipped. |
 | Error regression tests | Safe 500 responses across all five API operations; 400 for null/missing/malformed inputs; 404 for missing events/routes; save conflicts 409; failed saves do not publish; publisher failure leaves persisted data; Production errors contain no internal exception details. |
 | Lean optional-feature tests | Swagger UI returned 200; attendee PATCH persisted its boolean response; stale API update returned 409; two EF writers caused the second save to raise the mapped concurrency exception. |
-| dotnet run --project AppointmentScheduler.csproj --no-build --launch-profile http | Started cleanly in Development on http://localhost:5158 using a fresh disposable SQLite database; GET /api/events returned HTTP 200 with an empty array. |
+| dotnet run --project src/AppointmentScheduler.Api/AppointmentScheduler.Api.csproj --no-build --launch-profile http | Started cleanly in Development on http://localhost:5158 using a fresh disposable SQLite database; GET /api/events returned HTTP 200 with an empty array. |
 | Fresh-database HTTP lifecycle smoke on port 5170 | Invalid create 400; create 201; combined overlap filter/search 200 with one match; update 200; inverted range 400; cancel 204 then 204; default list empty; includeCancelled returned the cancelled event; cancelled update 400; unknown cancel 404. |
 | Runtime notification logs | Exactly one simulated Created, Updated, and Cancelled log appeared after the corresponding EF writes; the repeated cancellation emitted no duplicate. |
 | GET /openapi/v1.json | HTTP 200; OpenAPI 3.1.1 document contains /api/events. |
@@ -135,5 +135,22 @@ Record each checkpoint only after its commit is verified in Git.
 - Deferred Should/Could items: generated client, production documentation hosting, richer invitation workflow, automatic conflict resolution, availability checks
 - Known limitations: startup uses EnsureCreated rather than migrations; existing development databases must be recreated after schema changes; list results are not paginated; validation errors use one event-level domain error key
 - AI assistance: Phase 1-5 code/tests/documentation drafted with AI; clean build, tests, SQLite persistence, complete HTTP lifecycle behavior, simulated notification logging, OpenAPI output, reviewer startup, and repository hygiene executed locally
-- Git status, final commit, remote/link: latest local commit verified as 2e620c0; centralized error handling, null validation, regression tests, and updated documentation remain uncommitted. Remote state not rechecked this turn.
+- Git status: refactor changes are uncommitted; no staging, commit, push or remote changes performed. Existing untracked documentation and IDE files retained.
 - Commit-note clarification: the Phase 4 commit subject mentions failure handling, but the streamlined implementation intentionally defers external delivery-failure policy as documented above
+
+## Organisation refactor verification (2026-10-08)
+
+| Check | Result |
+| --- | --- |
+| Baseline build and tests | Build: 0 warnings/errors; 56 passed, 0 failed/skipped. |
+| `dotnet restore AppointmentScheduler.slnx` | Passed with the relocated API host. |
+| `dotnet build AppointmentScheduler.slnx --no-restore` | Passed: 0 warnings/errors. |
+| `dotnet test AppointmentScheduler.slnx --no-build --no-restore` | 56 passed, 0 failed/skipped; HTTP controller and test-host discovery work with the renamed assembly. |
+| Disposable SQLite Kestrel smoke through the HTTP launch profile | Swagger/OpenAPI 200; create 201; filtered search/list 200; update 200; stale update 409; attendance 204; cancel 204 twice; invalid create/range 400; missing cancel 404. |
+| Baseline vs refactor OpenAPI | Paths, schemas, validations, statuses and operation metadata identical, excluding the expected host title and smoke port. |
+| Baseline vs refactor SQLite | sqlite_master table/index/constraint definitions identical; persisted cancellation, attendance and version verified. |
+| Notification logs | Created once, Updated twice (PUT and attendance), Cancelled once; repeated cancellation did not republish. Existing ordering tests passed. |
+| Static compatibility and organisation audit | All 56 hand-authored type bodies unchanged; each top-level type matches its file and folder namespace. Program startup logic unchanged; private nested types retained. |
+| Existing database | Repository-root database SHA-256 unchanged. Default source-host connection path adjusted for the API move and verified using a relative disposable connection path. |
+
+See [REFACTORING.md](REFACTORING.md) for navigation and diagram guidance. No discovered correctness issue was repaired; existing limitations remain in scope documents.

@@ -1,3 +1,4 @@
+using AppointmentScheduler.Application.Events.Persistence;
 using AppointmentScheduler.Domain.Events;
 using AppointmentScheduler.Application.Events.Notifications;
 
@@ -57,32 +58,3 @@ public sealed class UpdateEventHandler(
                 .ToArray());
     }
 }
-
-public sealed record UpdateEventCommand(
-    Guid Id,
-    long Version,
-    string Title,
-    string Description,
-    DateTimeOffset StartTime,
-    DateTimeOffset EndTime,
-    IReadOnlyCollection<UpdateAttendeeCommand> Attendees);
-
-public sealed record UpdateAttendeeCommand(
-    string Name,
-    string EmailAddress,
-    bool IsAttending);
-
-public sealed record UpdateEventResult(
-    Guid Id,
-    string Title,
-    string Description,
-    DateTimeOffset StartTime,
-    DateTimeOffset EndTime,
-    long Version,
-    IReadOnlyCollection<UpdatedAttendeeResult> Attendees);
-
-public sealed record UpdatedAttendeeResult(
-    Guid Id,
-    string Name,
-    string EmailAddress,
-    bool IsAttending);

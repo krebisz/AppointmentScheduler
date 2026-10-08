@@ -1,0 +1,21 @@
+<Project Sdk="Microsoft.NET.Sdk.Web">
+
+  <PropertyGroup>
+    <RootNamespace>AppointmentScheduler.Api</RootNamespace>
+    <AssemblyName>AppointmentScheduler.Api</AssemblyName>
+    <TargetFramework>net10.0</TargetFramework>
+    <Nullable>enable</Nullable>
+    <ImplicitUsings>enable</ImplicitUsings>
+  </PropertyGroup>
+
+  <ItemGroup>
+    <PackageReference Include="Microsoft.AspNetCore.OpenApi" Version="10.0.12" />
+    <PackageReference Include="Swashbuckle.AspNetCore.SwaggerUI" Version="10.2.3" />
+  </ItemGroup>
+
+  <ItemGroup>
+    <ProjectReference Include="..\AppointmentScheduler.Application\AppointmentScheduler.Application.csproj" />
+    <ProjectReference Include="..\AppointmentScheduler.Infrastructure\AppointmentScheduler.Infrastructure.csproj" />
+  </ItemGroup>
+
+</Project>

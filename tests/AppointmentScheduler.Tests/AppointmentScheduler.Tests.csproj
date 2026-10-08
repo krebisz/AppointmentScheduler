@@ -1,5 +1,7 @@
 <Project Sdk="Microsoft.NET.Sdk">
   <PropertyGroup>
+    <RootNamespace>AppointmentScheduler.Tests</RootNamespace>
+    <AssemblyName>AppointmentScheduler.Tests</AssemblyName>
     <TargetFramework>net10.0</TargetFramework>
     <ImplicitUsings>enable</ImplicitUsings>
     <Nullable>enable</Nullable>
@@ -18,7 +20,7 @@
   </ItemGroup>
 
   <ItemGroup>
-    <ProjectReference Include="..\..\AppointmentScheduler.csproj" />
+    <ProjectReference Include="..\..\src\AppointmentScheduler.Api\AppointmentScheduler.Api.csproj" />
     <ProjectReference Include="..\..\src\AppointmentScheduler.Application\AppointmentScheduler.Application.csproj" />
     <ProjectReference Include="..\..\src\AppointmentScheduler.Domain\AppointmentScheduler.Domain.csproj" />
     <ProjectReference Include="..\..\src\AppointmentScheduler.Infrastructure\AppointmentScheduler.Infrastructure.csproj" />

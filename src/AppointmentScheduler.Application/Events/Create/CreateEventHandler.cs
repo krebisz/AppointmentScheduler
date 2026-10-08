@@ -1,3 +1,4 @@
+using AppointmentScheduler.Application.Events.Persistence;
 using AppointmentScheduler.Domain.Events;
 using AppointmentScheduler.Application.Events.Notifications;
 
@@ -44,30 +45,3 @@ public sealed class CreateEventHandler(
                 .ToArray());
     }
 }
-
-public sealed record CreateEventCommand(
-    string Title,
-    string Description,
-    DateTimeOffset StartTime,
-    DateTimeOffset EndTime,
-    IReadOnlyCollection<CreateAttendeeCommand> Attendees);
-
-public sealed record CreateAttendeeCommand(
-    string Name,
-    string EmailAddress,
-    bool IsAttending);
-
-public sealed record CreateEventResult(
-    Guid Id,
-    string Title,
-    string Description,
-    DateTimeOffset StartTime,
-    DateTimeOffset EndTime,
-    long Version,
-    IReadOnlyCollection<CreatedAttendeeResult> Attendees);
-
-public sealed record CreatedAttendeeResult(
-    Guid Id,
-    string Name,
-    string EmailAddress,
-    bool IsAttending);

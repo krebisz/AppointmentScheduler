@@ -1,3 +1,5 @@
+using AppointmentScheduler.Application.Events.Persistence;
+
 namespace AppointmentScheduler.Application.Events.List;
 
 public sealed class ListEventsHandler(IEventRepository eventRepository)
@@ -17,7 +19,7 @@ public sealed class ListEventsHandler(IEventRepository eventRepository)
         }
 
         var events = await eventRepository.ListAsync(
-            new EventQuery(
+            new EventRepositoryQuery(
                 from,
                 to,
                 string.IsNullOrWhiteSpace(query.Search) ? null : query.Search.Trim(),
@@ -43,27 +45,3 @@ public sealed class ListEventsHandler(IEventRepository eventRepository)
             .ToArray();
     }
 }
-
-public sealed record ListEventsQuery(
-    DateTimeOffset? From,
-    DateTimeOffset? To,
-    string? Search,
-    bool IncludeCancelled);
-
-public sealed record ListedEventResult(
-    Guid Id,
-    string Title,
-    string Description,
-    DateTimeOffset StartTime,
-    DateTimeOffset EndTime,
-    bool IsCancelled,
-    long Version,
-    IReadOnlyCollection<ListedAttendeeResult> Attendees);
-
-public sealed record ListedAttendeeResult(
-    Guid Id,
-    string Name,
-    string EmailAddress,
-    bool IsAttending);
-
-public sealed class InvalidEventQueryException(string message) : Exception(message);

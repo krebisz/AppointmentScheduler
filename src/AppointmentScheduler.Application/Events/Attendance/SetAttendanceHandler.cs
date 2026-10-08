@@ -1,3 +1,4 @@
+using AppointmentScheduler.Application.Events.Persistence;
 using AppointmentScheduler.Application.Events.Notifications;
 
 namespace AppointmentScheduler.Application.Events.Attendance;
@@ -41,9 +42,3 @@ public sealed class SetAttendanceHandler(
 
     }
 }
-
-public sealed record SetAttendanceCommand(
-    Guid EventId,
-    Guid AttendeeId,
-    bool IsAttending,
-    long Version);
