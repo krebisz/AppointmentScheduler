@@ -1,6 +1,5 @@
-using AppointmentScheduler.Application.Events;
-using AppointmentScheduler.Application.Events.List;
-using AppointmentScheduler.Domain.Events;
+using AppointmentScheduler.Application.Exceptions;
+using AppointmentScheduler.Domain.Exceptions;
 using Microsoft.AspNetCore.Diagnostics;
 
 namespace AppointmentScheduler.Api.ErrorHandling;

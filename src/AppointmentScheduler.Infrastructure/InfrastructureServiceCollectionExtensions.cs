@@ -1,8 +1,7 @@
-using AppointmentScheduler.Application.Events.Persistence;
-using AppointmentScheduler.Application.Events.Notifications;
-using AppointmentScheduler.Infrastructure.Events.Notifications;
-using AppointmentScheduler.Infrastructure.Events.Persistence;
-using AppointmentScheduler.Infrastructure.Persistence;
+using AppointmentScheduler.Application.Interfaces;
+using AppointmentScheduler.Infrastructure.DbContexts;
+using AppointmentScheduler.Infrastructure.NotificationPublishers;
+using AppointmentScheduler.Infrastructure.Repositories;
 using Microsoft.EntityFrameworkCore;
 using Microsoft.Extensions.DependencyInjection;
 

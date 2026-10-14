@@ -1,10 +1,10 @@
 # Architecture
 
-This document describes the current implementation. Claims are **Observed** from code, configuration, or tests unless explicitly labelled **Inferred** or **Recommended**.
+This document describes the current implementation, checked on 9 October 2026 with a clean build and 123 passing tests. Claims are **Observed** from code, configuration, or tests unless explicitly labelled **Inferred** or **Recommended**.
 
 ## Purpose and scope
 
-Appointment Scheduler is an ASP.NET Core HTTP API for a doctor's-practice calendar. An API consumer can create, list, filter, search, replace, soft-cancel, and respond to events. Each event owns one or more attendees.
+Appointment Scheduler is an ASP.NET Core HTTP API for a doctor's-practice calendar. An API consumer can create, retrieve by ID, list, filter, search, replace, soft-cancel, and respond to events. Each event owns one or more attendees.
 
 Inputs are JSON request bodies, route identifiers, and list query parameters. Outputs are JSON event representations, `application/problem+json` errors, a local SQLite database, and structured notification log entries.
 
@@ -14,13 +14,13 @@ Observed external dependencies are:
 - ASP.NET Core logging through `ILogger`;
 - HTTP callers using the API or Development-only Swagger UI.
 
-There is no frontend, authentication scheme, authorization policy, external notification service, message broker, cache, migration set, background worker, or deployment definition in the repository. Generated client distribution and production documentation hosting are also outside the current implementation.
+There is no frontend, authentication scheme, authorization policy, external notification service, message broker, cache, background worker, or deployment definition in the repository. Generated client distribution and production documentation hosting are also outside the current implementation.
 
 ## System shape
 
 | Boundary | Location | Responsibility | Dependencies |
 | --- | --- | --- | --- |
-| API | `src/AppointmentScheduler.Api`, `Program.cs`, `Controllers/`, `Events/`, `ErrorHandling/` | HTTP contracts, routing, model validation, response mapping, exception handling, OpenAPI, composition | Application and Infrastructure |
+| API | `src/AppointmentScheduler.Api`, `Program.cs`, `Controllers/`, `Requests/`, `Responses/`, `ErrorHandling/`, `OpenApi/` | HTTP contracts, routing, model validation, response mapping, exception handling, OpenAPI, composition | Application and Infrastructure |
 | Application | `src/AppointmentScheduler.Application` | Use-case orchestration and persistence/notification ports | Domain |
 | Domain | `src/AppointmentScheduler.Domain` | Event aggregate, attendee entity, lifecycle rules, invariants | .NET runtime only |
 | Infrastructure | `src/AppointmentScheduler.Infrastructure` | EF Core/SQLite repository and logging notification adapter | Application and Domain |
@@ -28,7 +28,7 @@ There is no frontend, authentication scheme, authorization policy, external noti
 
 Project references enforce the main dependency direction: Domain has no project reference; Application references Domain; Infrastructure references Application and Domain; the API references Application and Infrastructure.
 
-`Program.cs` is the composition root. It registers controllers, Problem Details, `ApiExceptionHandler`, OpenAPI, the five use-case handlers, and Infrastructure. Handlers, `SchedulerDbContext`, `IEventRepository`, and `IEventNotificationPublisher` are scoped. Startup opens a scope and calls `EnsureCreatedAsync`; startup fails if database initialization fails.
+`Program.cs` is the composition root. It registers controllers, Problem Details, `ApiExceptionHandler`, OpenAPI, the six use-case handlers, and Infrastructure. Both operation/schema transformers live in API `OpenApi/`. Handlers, `SchedulerDbContext`, `IEventRepository`, and `IEventNotificationPublisher` are scoped. Startup opens a scope and calls `SchedulerDatabaseInitializer.InitializeAsync`, which checks legacy history then applies `MigrateAsync`; startup fails if database initialization fails.
 
 ```mermaid
 flowchart LR
@@ -41,18 +41,37 @@ flowchart LR
     Infra --> Logs[Structured logs]
 ```
 
+## Folder responsibilities
+
+Folders group artifacts so a project directory directly exposes its composition. This is the user's preferred navigation convention; the four projects still enforce architectural responsibilities.
+
+| Project | Artifact folders |
+| --- | --- |
+| API | Controllers, Requests, Responses, ErrorHandling, OpenApi; host configuration and Program stay at root |
+| Application | Handlers, Commands, Queries, Inputs, Results, Interfaces, Exceptions, Notifications |
+| Domain | Entities, Inputs, Exceptions, Validation |
+| Infrastructure | DbContexts, Configurations, Repositories, DatabaseInitialization, Migrations, NotificationPublishers |
+
+Domain Inputs are immutable operation payloads, not additional entities or claimed value objects. Application Interfaces contains repository/publisher ports; Notifications contains the notification message and its associated enum. Infrastructure folders name concrete artifact responsibilities rather than wrapping everything in Persistence. Tests group under each boundary by the artifact/concern tested, with API Fixtures separated from endpoint tests.
+
+One hand-authored top-level type has a matching file/folder namespace; private nested helpers and the existing Program arrangement remain. Separate HTTP/application messages and narrow interfaces protect real boundaries. Trace an operation by its consistently named files, e.g. CreateEventController -> CreateEventHandler -> CalendarEvent -> EfEventRepository, across these artifact folders. No Events container, empty extension folder or new abstraction is needed. Future subgroups can be introduced when artifact directories become substantial.
+
 ## Runtime flows
 
 ### Create an event
 
-1. `POST /api/events` binds `CreateEventRequest`. `[ApiController]` and data annotations reject missing/malformed bodies, invalid email format, lengths, and an empty attendee collection. `EventsController.Create` explicitly rejects null collection entries.
+1. `POST /api/events` binds `CreateEventRequest`. `[ApiController]` and data annotations reject missing/malformed bodies, invalid email format, lengths, and an empty attendee collection. `CreateEventController.CreateAsync` explicitly rejects null collection entries.
 2. The controller maps the request to `CreateEventCommand` and calls `CreateEventHandler.HandleAsync`.
 3. `CalendarEvent.Create` trims required text, normalizes times to UTC, verifies `end > start`, creates attendee IDs, validates email addresses, and enforces case-insensitive email uniqueness.
-4. `EfEventRepository.AddAsync` adds the aggregate and calls `SaveChangesAsync`. EF persists the event and owned attendees in one `SaveChanges` transaction.
+4. `EfEventRepository.AddAndSaveAsync` adds the aggregate and calls `SaveChangesAsync`. EF persists the event and owned attendees in one `SaveChanges` transaction.
 5. After persistence, the handler publishes a `Created` `EventNotification`. `LoggingEventNotificationPublisher` records type, event ID, and recipient count; it does not deliver externally or log addresses.
-6. The controller returns 201 with generated event/attendee IDs and version 1. It does not return a `Location` header.
+6. The controller returns 201 with generated event/attendee IDs and version 1. It uses `CreatedAtRoute` with the named GET route to return a resolvable `Location` header.
 
 If persistence fails, notification publication is not attempted. If publication fails, the event remains saved and the centralized handler returns 500.
+
+### Retrieve by ID
+
+`GetEventController.GetAsync` calls `GetEventHandler` and maps details, attendees, cancellation state and version to `GetEventResponse`. Unknown IDs return 404; cancelled events return 200. The existing tracked lookup is reused without mutation, saving or notification. POST Location resolves to this route.
 
 ### List, filter, and search
 
@@ -65,8 +84,8 @@ If persistence fails, notification publication is not attempted. If publication 
 
 `PUT`, attendance `PATCH`, and `DELETE` load a tracked aggregate with attendees through `GetByIdAsync`.
 
-- Update and attendance compare the request version with the loaded version before changing state. Domain methods reject updates to cancelled events; update replaces the complete attendee collection; attendance changes one owned attendee.
-- State-changing update, attendance, and first cancellation increment `CalendarEvent.Version`. An attendance no-op does not save, increment, or notify. Cancellation is idempotent and a repeated request also does not save or notify.
+- Update and attendance compare the request version with the loaded version before changing state. Domain methods reject updates to cancelled events; update validates a complete replacement and retains supplied existing IDs/instances, adds ID-less entries and removes omissions; omitted/null attendance is preserved for retained IDs and defaults false for additions; attendance changes one owned attendee.
+- Every valid PUT, changed attendance, and first cancellation increment `CalendarEvent.Version`. An attendance no-op does not save, increment, or notify. Cancellation is idempotent and a repeated request also does not save or notify.
 - `Version` is an EF concurrency token. The application check catches stale clients; the EF check catches a database race between load and save. `EfEventRepository` translates `DbUpdateConcurrencyException` to `EventConcurrencyException`.
 - Successful changes are saved before an `Updated` or `Cancelled` notification is published. Update returns 200; attendance and cancellation return 204.
 
@@ -85,11 +104,13 @@ Material invariants:
 - end time must be later than start time;
 - stored times are UTC;
 - cancelled events cannot be updated or have attendance changed;
-- event version starts at 1 and increments on actual state changes.
+- event version starts at 1 and increments on each valid PUT and changed attendance/first cancellation; identical PUT is not detected as a no-op.
 
-EF maps `CalendarEvent` to `Events` and its owned collection to `Attendees`. IDs are application-generated GUIDs. The attendee table has an `EventId` foreign key and a unique index on `(EventId, EmailAddress)`. `StartTime` and `EndTime` are stored as UTC ticks (`INTEGER`). `Version` is required and marked as a concurrency token.
+`CalendarEventConfiguration`, applied by the context, maps `CalendarEvent` to `Events` and its owned collection to `Attendees`. IDs are application-generated GUIDs. The attendee table has an `EventId` foreign key and a unique index on `(EventId, EmailAddress)`. `StartTime` and `EndTime` are stored as UTC ticks (`INTEGER`). `Version` is required and marked as a concurrency token.
 
-There are no migrations or seed data. `EnsureCreatedAsync` creates a fresh schema and does not upgrade an older database. The default file, `appointment-scheduler.db`, persists across restarts and is ignored by Git.
+An initial migration/model snapshot define fresh schema creation. The initializer refuses user tables without migration history; fresh/managed databases receive migrations. No automatic legacy baseline or seed data exists. The retained default root database is legacy and startup against it is blocked; choose a separate path as described in README. The design-time factory requires an explicit connection environment variable.
+
+When retained email values change, the repository saves temporary unique values and final values inside one explicit transaction so SQLite permits swaps. Conflicts/final-phase failures roll back database changes. Publication remains outside this transaction.
 
 ## Cross-cutting behaviour
 
@@ -99,7 +120,7 @@ The API trusts any network caller because authentication and authorization are a
 
 ### Validation and errors
 
-Request binding and data annotations run at the API boundary. Domain invariants run again in `CalendarEvent`, so non-HTTP callers cannot bypass the central rules. `ApiExceptionHandler` maps:
+Request binding and data annotations run at the API boundary. Create/update use explicit `JsonRequired` timestamp presence, so omission/null/malformed values return 400; Domain separately enforces end-after-start. Domain invariants run again in `CalendarEvent`, so non-HTTP callers cannot bypass the central rules. `ApiExceptionHandler` maps:
 
 - domain/query validation to 400;
 - missing events to 404;
@@ -127,4 +148,6 @@ The xUnit test project uses four levels:
 
 Injected repository/save/publisher failures prove error propagation, safe Production 500 responses, and that notifications do not run after failed saves. Tests also prove that a publisher failure occurs after persisted data.
 
-The suite does not prove authentication, authorization, migrations, external notification delivery, browser CORS behavior, load/performance, multi-instance operation, backup/restore, or a deployed production configuration because those capabilities are absent.
+The suite verifies fresh/repeated migration initialization and legacy refusal, but does not prove a successful legacy adoption, later-version upgrade, simultaneous HTTP contention, authentication, authorization, external notification delivery, browser CORS behavior, load/performance, multi-instance operation, backup/restore, or a deployed production configuration. Some are absent; load/deployment/operational guarantees were not exercised.
+
+Independent attendee replies still share one event version. Save-then-notify can still return 500 after commit; retrying POST can duplicate creation. The recent improvements do not change either review mechanism.

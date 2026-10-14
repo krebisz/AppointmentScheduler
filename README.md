@@ -1,6 +1,6 @@
 # Doctorly calendar API
 
-Assessment implementation for a doctor's-practice calendar API.
+Assessment implementation and subsequent learning refactors for a doctor's-practice calendar API. Current structure/documentation checked against source and a clean build/123-test run on 9 October 2026.
 
 ## Reviewer guide
 
@@ -8,7 +8,9 @@ This README is the entry point for building, running, using, and reviewing the s
 
 - [`NET Technical Test.pdf`](<NET Technical Test.pdf>) is the original assessment brief.
 - [`ASSESSMENT.md`](ASSESSMENT.md) is a searchable transcription of the brief and its email clarification; it contains requirements, not implementation claims.
-- [`WORKLOG.md`](WORKLOG.md) records prioritisation, assumptions, architectural decisions, verified results, deferred scope, and phase commit hashes.
+- [`WORKLOG.md`](WORKLOG.md) records historical/current verification and phase commits.
+- [`ARCHITECTURE.md`](ARCHITECTURE.md), [`IMPLEMENTATION_GUIDE.md`](IMPLEMENTATION_GUIDE.md) and [`DECISIONS_AND_LIMITATIONS.md`](DECISIONS_AND_LIMITATIONS.md) describe structure, source navigation and guarantees.
+- [`TECHNICAL_REFERENCE.md`](TECHNICAL_REFERENCE.md) retains detailed learning explanations and exercises.
 
 For a short technical review, run the commands below, open Swagger, then follow the create-event vertical slice described under **Architecture and repository structure**. `git log --oneline --reverse` shows the implementation sequence; the phase table in `WORKLOG.md` explains what each checkpoint delivered.
 
@@ -20,24 +22,44 @@ Confirm the SDK before continuing:
 
     dotnet --version
 
-No separate database server, migration command, secrets, authentication setup, frontend, or container runtime is required.
+No separate database server, secrets, authentication setup, frontend, or container runtime is required. EF migrations now manage schema creation; use an explicit separate database as below.
 
 ## Build, test, and run
 
 From the repository root:
 
+    dotnet tool restore
     dotnet restore AppointmentScheduler.slnx
     dotnet build AppointmentScheduler.slnx --no-restore
     dotnet test AppointmentScheduler.slnx --no-build --no-restore
+    $databasePath = Join-Path $env:TEMP ("doctorly-" + [guid]::NewGuid().ToString("N") + ".db")
+    $env:ConnectionStrings__SchedulerDatabase = "Data Source=$databasePath;Pooling=False"
+    dotnet ef database update --project src/AppointmentScheduler.Infrastructure --no-build
+    dotnet ef migrations has-pending-model-changes --project src/AppointmentScheduler.Infrastructure --no-build
     dotnet run --project src/AppointmentScheduler.Api/AppointmentScheduler.Api.csproj --no-build --launch-profile http
 
-The verified result is a clean build and 56 passing tests. Keep the final command running and wait for:
+The verified result is a clean build and 123 passing tests. Keep the final command running and wait for:
 
     Now listening on: http://localhost:5158
 
-The API creates appointment-scheduler.db in the repository root on first run and retains data across restarts. The database and related SQLite files are ignored by Git.
+## Database creation and upgrades
 
-Because this assessment uses `EnsureCreated` rather than migrations, an older local database is not upgraded. Backward compatibility is intentionally out of scope. If you ran an earlier schema, stop the API, back up any data you need, and remove the old database before restarting. Resetting the database discards its stored events. Alternatively, point the connection string at a new database file to retain the original untouched. A fresh clone needs no database step.
+The initial migration is `20261008113438_InitialCreate`. Startup uses `SchedulerDatabaseInitializer` to apply pending migrations to fresh or migration-managed databases. The explicit CLI update above makes setup deliberate; startup can also initialize a fresh file. `dotnet-tools.json` pins dotnet-ef 10.0.12. There is no seed data.
+
+**The existing repository-root `appointment-scheduler.db` is a legacy database without migration history. Default startup against it is deliberately blocked, and its data is preserved.** Select the separate fresh path above or another migration-managed database. Retain the selected path to reuse its data; generating a new path on every run starts a different dataset.
+
+`SchedulerDbContextDesignFactory` requires `ConnectionStrings__SchedulerDatabase` explicitly for CLI operations. An absolute path avoids CLI/runtime working-directory differences. Do not blindly apply the initial migration to an EnsureCreated database, delete existing data or assume that inserting migration history converts it. Legacy adoption requires a reviewed baseline/data transition on disposable copies; no automatic transition exists.
+
+For a future model change, with the explicit connection variable still set:
+
+```powershell
+dotnet ef migrations add ChangeName --project src/AppointmentScheduler.Infrastructure --output-dir Migrations
+dotnet build AppointmentScheduler.slnx --no-restore
+dotnet ef migrations has-pending-model-changes --project src/AppointmentScheduler.Infrastructure --no-build
+dotnet ef database update --project src/AppointmentScheduler.Infrastructure --no-build
+```
+
+Inspect generated migrations and test disposable database copies before upgrading retained data. Startup currently applies pending migrations; production deployment/backup/rollback procedures are not supplied.
 
 Confirm the API is running with Postman, a browser, or another HTTP client:
 
@@ -56,6 +78,7 @@ Keep the `dotnet run` terminal open while using Swagger, Postman, or another HTT
 | Method | Route | Purpose | Success |
 | --- | --- | --- | --- |
 | GET | `/api/events` | List, filter, and search events | 200 |
+| GET | `/api/events/{id}` | Retrieve details, attendees, cancellation state and version, including cancelled events | 200 |
 | POST | `/api/events` | Create an event | 201 |
 | PUT | `/api/events/{id}` | Replace event details and attendees | 200 |
 | DELETE | `/api/events/{id}` | Soft-cancel an event | 204 |
@@ -79,7 +102,9 @@ POST /api/events with application/json:
       ]
     }
 
-A valid request returns HTTP 201 with generated event and attendee IDs. Timestamps are normalized to UTC. The event requires a title, description, a valid time range, and at least one attendee; attendee emails must be valid and unique within the event.
+A valid request returns HTTP 201 with generated event and attendee IDs, version 1 and a route-aware `Location` header. Follow Location to GET the event; missing IDs return 404 and cancelled events remain retrievable. Reads do not save, change versions or notify. Timestamps are normalized to UTC. The event requires a title, description, a valid time range, and at least one attendee; attendee emails must be valid and unique within the event.
+
+Both `startTime` and `endTime` must be explicitly present on POST and PUT. Omitted, null or malformed values return 400. End must be later than start; no minimum calendar date policy is imposed. Invalid writes leave storage unchanged and publish nothing.
 
 ## List, filter, and search
 
@@ -87,7 +112,7 @@ GET /api/events returns events ordered by UTC start time. Optional query paramet
 
 - from: includes events whose end time is on or after this timestamp.
 - to: includes events whose start time is on or before this timestamp.
-- search: case-insensitive title or description search.
+- search: trimmed title/description substring search using SQLite LIKE (default ASCII case-insensitive matching; `%` and `_` are unescaped wildcards).
 - includeCancelled: includes soft-cancelled events when true; defaults to false.
 
 The date filters therefore use inclusive overlap semantics. An inverted date range returns HTTP 400.
@@ -98,12 +123,16 @@ Example combined query:
 
 ## Update and cancel
 
-- Create, list, and update responses include a numeric `version`.
+- Create, GET by ID, list, and update responses include a numeric `version`.
 - PUT /api/events/{id} fully replaces the event details and attendee collection. Include the latest `version` in the request; a stale version returns HTTP 409.
 - DELETE /api/events/{id} soft-cancels the event and returns HTTP 204. Repeating the cancellation is idempotent.
 - Missing events return HTTP 404. Cancelled events cannot be updated.
 
-Example PUT body using the version returned by create or list:
+PUT attendee identity is explicit: supplied `id` must identify a child of this event and is retained; duplicate/foreign IDs return 400. Omitted/null IDs mean additions with new IDs; identity is never inferred from email. Existing attendees omitted from the replacement list are removed.
+
+For retained IDs, omitted/null `isAttending` preserves attendance; explicit true/false replaces it. New attendees default to false when omitted/null. The whole replacement is validated before mutation, including case-insensitive email uniqueness. Retained attendees can swap emails atomically through SQLite reconciliation. Every valid PUT increments version and publishes after saving, even if values are identical.
+
+Example PUT body using the current version and an actual attendee ID returned by create, GET or list (replace the placeholder):
 
     {
       "version": 1,
@@ -113,14 +142,14 @@ Example PUT body using the version returned by create or list:
       "endTime": "2026-10-01T10:30:00Z",
       "attendees": [
         {
+          "id": "<existing-attendee-id>",
           "name": "Alex Patient",
-          "emailAddress": "alex@example.com",
-          "isAttending": false
+          "emailAddress": "alex@example.com"
         }
       ]
     }
 
-If a write returns HTTP 409, call GET /api/events again, locate the event by ID, and decide whether to retry using the new version. The API does not merge changes automatically.
+If a write returns HTTP 409, call GET /api/events/{id} again and decide whether to retry using the new version. The API does not merge changes automatically.
 
 ## Accept or reject an event
 
@@ -133,7 +162,9 @@ An attendee response is represented by the existing `isAttending` boolean. Send 
       "version": 1
     }
 
-The endpoint requires an explicit true or false response and a positive version; omitted or null attendance values return 400. It returns HTTP 204 on success. Read the event again to obtain the current version (unchanged if the attendance value was already the same). This intentionally models only a simple accept/reject state, not invitation workflow, response history, or comments.
+The endpoint requires an explicit true or false response and a positive version; omitted or null attendance values return 400. It returns HTTP 204 on success. Read the event with GET by ID to obtain the current version (unchanged if the attendance value was already the same). This intentionally models only a simple accept/reject state, not invitation workflow, response history, or comments.
+
+Independent attendee replies still share one event version and can conflict despite changing separate answers. Identity retention does not change that concurrency boundary.
 
 ## Notifications
 
@@ -141,7 +172,7 @@ After a create, update, or first cancellation is persisted, the application requ
 
 Notification publication occurs after persistence. Repeating an idempotent cancellation does not publish another notification. External delivery guarantees, retries, and transactional outbox behavior are not implemented.
 
-If publication throws after persistence, the API returns 500 but the saved event remains. A failed write response does not guarantee rollback: inspect stored data before retrying, especially after POST, which could otherwise create a duplicate.
+If publication throws after persistence, the API returns 500 but the saved event remains. A failed write response does not guarantee rollback: inspect stored data before retrying, especially after POST, which could otherwise create a duplicate. Resource discovery, stable IDs and email-swap transactions do not provide POST idempotency or notification durability.
 
 ## Error responses
 
@@ -158,7 +189,7 @@ Infrastructure translates EF concurrency errors into the application conflict ex
 
     dotnet test AppointmentScheduler.slnx
 
-Last verified: 56 passed, 0 failed, 0 skipped. Includes null/malformed inputs, expected errors, injected repository and save failures, post-save notification failure, and safe Production error responses.
+Last verified: 123 passed, 0 failed, 0 skipped. Includes timestamp omission/null/malformed values, unchanged storage/no publication on invalid writes, GET/Location, stable attendee identity/attendance, SQLite reconciliation/rollback, fresh migrations/legacy refusal, expected errors, injected failures and safe Production error responses.
 
 ### Test methodology
 
@@ -177,7 +208,7 @@ The http launch profile uses the Development environment. Its OpenAPI 3.1.1 docu
 
     http://localhost:5158/openapi/v1.json
 
-It was verified to contain /api/events. A generated third-party client is not implemented.
+It includes GET by ID, POST Location metadata, required timestamps and optional update ID/attendance semantics. Executable metadata tests verify these contracts. Schema/type identifiers changed with the naming refactor; regenerate source consumers/clients if needed. A generated third-party client is not implemented.
 
 Interactive Swagger documentation is available in Development at:
 
@@ -191,13 +222,13 @@ The default connection string is in `appsettings.json`:
 
     Data Source=../../appointment-scheduler.db
 
-The relative path is resolved from the API project directory during `dotnet run`, so the existing repository-root database is retained. For another working directory or deployment, set an explicit database path. Override it without editing source by setting the standard .NET configuration variable `ConnectionStrings__SchedulerDatabase`. The default HTTP launch profile sets `ASPNETCORE_ENVIRONMENT=Development`, which enables OpenAPI and Swagger UI.
+The relative path is resolved from the API project directory during `dotnet run`, and points at the retained legacy database, whose startup is deliberately refused until a reviewed transition. Use the explicit separate path above. For another working directory or deployment, set an explicit database path. Override it without editing source by setting the standard .NET configuration variable `ConnectionStrings__SchedulerDatabase`. The default HTTP launch profile sets `ASPNETCORE_ENVIRONMENT=Development`, which enables OpenAPI and Swagger UI.
 
 ## Troubleshooting
 
 - `ECONNREFUSED` means the API is not listening at that address. Start it with the documented `dotnet run` command and wait for `Now listening on: http://localhost:5158`.
 - If port 5158 is already in use, stop the conflicting process or run with `--urls http://localhost:<another-port>` and use that URL in the client.
-- If an older local database reports a missing column after a model change, stop the API and remove the ignored `appointment-scheduler.db` file once. A fresh download does not require this.
+- If startup reports tables without migration history, preserve the database and select a separate fresh path. Legacy adoption is blocked; do not delete/reset data. For EF CLI configuration errors, set the explicit connection variable in the same terminal.
 - Swagger and the OpenAPI document are available only while running in Development.
 
 ## Design and current limits
@@ -206,7 +237,7 @@ The relative path is resolved from the API project directory during `dotnet run`
 - Application orchestrates lifecycle use cases through repository and channel-neutral notification ports.
 - Infrastructure implements those ports using EF Core 10.0.12 with SQLite and an in-process structured-log notification adapter.
 - `src/AppointmentScheduler.Api` owns HTTP contracts, controllers, and dependency injection.
-- Database creation currently uses EnsureCreated rather than migrations.
+- Guarded EF migrations create/upgrade fresh or managed databases; no automatic legacy EnsureCreated transition is implemented.
 - Same-event writes use a small optimistic-concurrency mechanism: clients send the latest numeric version and stale writes return HTTP 409; EF Core also checks the version while saving.
 - Concurrency handling does not attempt automatic retries, merging, ETags, distributed coordination, or conflict history.
 - Attendance is a single boolean per attendee; richer invitation workflows are outside the assessment scope.
@@ -221,7 +252,7 @@ The solution uses four explicit boundaries with inward dependencies:
                |
              Domain
 
-- `src/AppointmentScheduler.Api`: `Program.cs` composes dependencies; `Controllers/` owns routes and response mapping, `Events/<UseCase>/` owns HTTP contracts, and `ErrorHandling/` owns centralized exception mapping.
+- `src/AppointmentScheduler.Api`: `Program.cs` composes dependencies; `Controllers/` owns routes/response mapping; `Requests/` and `Responses/` own HTTP contracts, and `ErrorHandling/` owns centralized exception mapping.
 - `src/AppointmentScheduler.Domain`: the `CalendarEvent` aggregate owns attendees and enforces lifecycle and validation rules. It has no application, persistence, or HTTP dependency.
 - `src/AppointmentScheduler.Application`: use-case handlers orchestrate the aggregate through repository and notification interfaces. It depends only on Domain.
 - `src/AppointmentScheduler.Infrastructure`: EF Core/SQLite persistence and the simulated logging notification adapter implement Application interfaces.
@@ -230,16 +261,18 @@ The solution uses four explicit boundaries with inward dependencies:
 The main vertical slice demonstrates the complete dependency path without extra mediator or generic-repository machinery:
 
     POST /api/events
-      -> EventsController and request contract
+      -> CreateEventController and request contract
       -> CreateEventHandler
       -> CalendarEvent.Create and attendee invariants
       -> IEventRepository / EfEventRepository
       -> SchedulerDbContext / SQLite
       -> notification port / structured-log adapter
 
-The key files for that walkthrough are [`EventsController.cs`](src/AppointmentScheduler.Api/Controllers/EventsController.cs), [`CreateEventHandler.cs`](src/AppointmentScheduler.Application/Events/Create/CreateEventHandler.cs), [`CalendarEvent.cs`](src/AppointmentScheduler.Domain/Events/CalendarEvent.cs), [`EfEventRepository.cs`](src/AppointmentScheduler.Infrastructure/Persistence/EfEventRepository.cs), and [`CreateEventEndpointTests.cs`](tests/AppointmentScheduler.Tests/Api/Events/Create/CreateEventEndpointTests.cs).
+The key files for that walkthrough are [`CreateEventController.cs`](src/AppointmentScheduler.Api/Controllers/CreateEventController.cs), [`CreateEventHandler.cs`](src/AppointmentScheduler.Application/Handlers/CreateEventHandler.cs), [`CalendarEvent.cs`](src/AppointmentScheduler.Domain/Entities/CalendarEvent.cs), [`EfEventRepository.cs`](src/AppointmentScheduler.Infrastructure/Repositories/EfEventRepository.cs), and [`CreateEventEndpointTests.cs`](tests/AppointmentScheduler.Tests/Api/Controllers/CreateEventEndpointTests.cs).
 
-The same separation supports listing, updating, cancellation, attendance response, and concurrency handling. The detailed reasons and trade-offs, including SQLite, aggregate ownership, soft cancellation, UTC storage, notification timing, optimistic concurrency, and deferred features, are recorded in `WORKLOG.md`.
+Projects now group by artifact for directory scanning: API Controllers/Requests/Responses; Application Handlers/Commands/Queries/Inputs/Results/Interfaces/Exceptions/Notifications; Domain Entities/Inputs/Exceptions/Validation; Infrastructure DbContexts/Configurations/Repositories/DatabaseInitialization/Migrations/NotificationPublishers. Tests mirror artifacts and keep API Fixtures separate. OpenApi and ErrorHandling remain explicit concerns. The four project boundaries and existing operation/type names are retained.
+
+The same separation supports retrieval, listing, updating, cancellation, attendance response, and concurrency handling. The detailed reasons and trade-offs, including SQLite, aggregate ownership, soft cancellation, UTC storage, notification timing, optimistic concurrency, and deferred features, are recorded in `WORKLOG.md`.
 
 ## Refactor navigation and diagrams
 

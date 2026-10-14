@@ -2,14 +2,15 @@
 
 This is the reviewer-facing record of prioritisation, decisions, delivery sequence, verified evidence, and deferred scope. Replace stale entries rather than accumulating an agent transcript. `ASSESSMENT.md` and the PDF define requirements.
 
-## Snapshot
+## Snapshot - 9 October 2026
 
-- Last verified: 2026-10-08, organisation refactor
-- SDK: 10.0.401; target framework and dependency versions retained
-- Current slice: feature organisation and one hand-authored top-level type per file
-- Outcome: API host relocated and renamed; existing 56 tests retained and passing
-- Scope: behaviour preserved; no backlog or correctness changes, commit, push, or publication
-- Existing untracked documentation and IDE state preserved; documentation paths updated
+- SDK 10.0.401; net10.0; EF Core SQLite/Design and local dotnet-ef 10.0.12.
+- Four architectural boundaries; artifact folders/namespaces without redundant Events/operation containers; matching hand-authored type files and Program/private nested helpers retained.
+- Required timestamps, GET by ID/Location, guarded initial migrations, stable attendee identity/attendance preservation and atomic email-swap reconciliation implemented.
+- Current build: 0 warnings/errors. Current suite: **123 passed, 0 failed/skipped**.
+- Root working database is preserved legacy data; automatic adoption is blocked. Select a separate fresh/managed database per README.
+- Save-then-notify/duplicate POST retry risk and shared event-version contention remain unchanged.
+- Latest pass implements artifact grouping at the user's preference: Controllers/Requests/Responses, handlers/messages/interfaces, Domain entities/inputs and explicit Infrastructure artifact groups. Behaviour is preserved; no commit/push/publication performed.
 
 ## Coverage
 
@@ -24,7 +25,7 @@ This is the reviewer-facing record of prioritisation, decisions, delivery sequen
 | Must | List with filters | Verified | GET /api/events supports inclusive overlap filters using from/to and returns UTC start-time order. |
 | Must | Search events | Verified | The same endpoint supports case-insensitive title/description search, combinable with date filters. |
 | Must | Notification capability | Verified | Create, update, and first cancellation publish after persistence through an application port; infrastructure emits a simulated structured log without recipient addresses or external delivery. |
-| Must | Appropriate tests; runnable solution | Verified | 56 tests pass; solution compilation succeeds. |
+| Must | Appropriate tests; runnable solution | Verified | 123 tests pass; solution compilation succeeds. |
 | Explicit design | EF or similar, storage, layering, interfaces, DDD patterns | Verified | Separate Domain, Application, Infrastructure and API projects/boundaries; EF Core SQLite repository implements the application port. |
 | Should | OpenAPI | Verified | Development document returned HTTP 200, OpenAPI 3.1.1, with /api/events. |
 | Should | Generated client | Deferred | OpenAPI JSON is available as generation input; generator/tooling and distributed client source were not added because they were disproportionate to the assessment slice. |
@@ -39,13 +40,13 @@ This is the reviewer-facing record of prioritisation, decisions, delivery sequen
 | --- | --- |
 | .NET SDK 10.0.401 and net10.0 | This is the only installed SDK; the email explicitly waives .NET 5. |
 | ASP.NET Core Web API with controllers and OpenAPI enabled | Preserves the supplied controller template and makes HTTP contracts explicit. No authentication, frontend, or containers are required. |
-| EF Core SQLite 10.0.12 with startup EnsureCreated | Provides verified relational persistence with no external server. Migrations are deferred; a fresh local database is created automatically. |
+| EF Core SQLite 10.0.12 with guarded startup migrations | Provides verified relational persistence with no external server. Initial migration/model snapshot create fresh schemas; managed databases receive pending migrations. Legacy tables without history are refused, not reset. |
 | Event aggregate root owns Attendees | Enforces event time, field limits, at least one attendee, valid email, and case-insensitive unique attendee emails in one consistency boundary. |
 | Accept offset-aware timestamps and persist UTC | Avoids local-time ambiguity; end time must be later than start time. |
 | Store normalized UTC timestamp ticks in SQLite | Integer storage makes relational overlap filtering and ordering deterministic across offsets. |
 | Filter by inclusive event overlap; search title/description | An event matches when it overlaps the requested from/to range. Search uses SQLite LIKE semantics and results are ordered by start time then ID. Pagination is deferred for the assessment scope. |
-| Soft cancellation with default query exclusion | DELETE is idempotent and preserves data. Cancelled events remain inspectable through includeCancelled=true and cannot be updated. |
-| Separate Domain, Application, Infrastructure, and API boundaries | Project references enforce Domain <- Application <- Infrastructure, while the API composes Application and Infrastructure. Only the persistence boundary has an interface. |
+| Soft cancellation with default query exclusion | DELETE is idempotent and preserves data. Cancelled events remain inspectable through includeCancelled=true and GET by ID and cannot be updated. |
+| Separate Domain, Application, Infrastructure, and API boundaries | Project references enforce Domain <- Application <- Infrastructure, while the API composes Application and Infrastructure. Persistence and notification ports are interfaces. |
 | Deliver vertical slices through those boundaries | The create-event slice now compiles, runs, persists and covers its invalid-time failure path. |
 | Implement notification capability after the core event lifecycle, but before Should/Could features | Notifications depend on established event operations and are an infrastructure concern, but remain a Must requirement. |
 | Swagger UI over the existing OpenAPI document | Adds reviewer-facing interactive documentation with one small package/configuration change. It is Development-only for this assessment. |
@@ -69,7 +70,7 @@ This is the reviewer-facing record of prioritisation, decisions, delivery sequen
 
 ### 80/20 scope boundary
 
-- User explicitly excluded backward compatibility: the temporary schema-upgrade implementation and test were removed. EnsureCreated supports fresh databases only; existing data was not changed or deleted.
+- Historically, assessment-time schema upgrades were excluded. The learning improvements now introduce guarded migrations for fresh/managed databases; automatic legacy adoption remains blocked and retained data is not reset.
 - Expected exceptions map centrally in ApiExceptionHandler to 400/404/409; unexpected failures are logged with a trace ID and return a generic 500 ProblemDetails in all environments. Controllers retain request validation and HTTP mapping, with no repeated exception catches.
 - Null attendee elements return 400; required fields/collections/bodies use API validation. Attendance PATCH requires an explicit boolean response so omitted/null values cannot silently reject.
 - Persistence errors propagate and prevent notification publication. A publisher error after persistence propagates as 500 without rolling back saved data; no automatic retry or outbox is claimed.
@@ -78,9 +79,9 @@ This is the reviewer-facing record of prioritisation, decisions, delivery sequen
 - Concurrency demonstrates detection and a clear 409 response, not conflict resolution.
 - Accept/reject changes one attendee's boolean response by stable identifier; it is not a broader invitation or reservation workflow.
 
-## Sequential implementation plan
+## Historical assessment implementation sequence
 
-This is the agreed working plan, not a change to the employer's priorities. Adjust to actual remaining time and explain material deviations. Layers define responsibility; slices deliver working use cases across layers.
+This records the assessment delivery order, not a current plan or a change to employer priorities. Layers define responsibility; slices deliver working use cases across layers.
 
 | Step | Deliverable and boundaries | Why this slice |
 | --- | --- | --- |
@@ -92,7 +93,7 @@ This is the agreed working plan, not a change to the employer's priorities. Adju
 | 6 | Fresh build/run, tests, README, ignore/tracked-file audit, Git state, and submission preparation | Preserve the final 30 minutes for an honest runnable handover. |
 | 7 | Lean Swagger UI, attendee response, and optimistic-concurrency demonstrations | Cover selected Should/Could items without introducing a client-generation toolchain or workflow platform. |
 
-## Verification
+## Historical assessment verification (56-test baseline)
 
 | Command / request | Observed result |
 | --- | --- |
@@ -108,7 +109,7 @@ This is the agreed working plan, not a change to the employer's priorities. Adju
 | Reviewer documentation audit | README is the entry point and links the original brief, requirements transcription, and worklog. Usage, architecture/dependency direction, repository layout, create-event vertical slice, direct source links, test methodology, phase commits, scope, and limitations were checked against the project files and verified behavior. |
 | Repository audit | No tracked build/database artifacts or obvious secret patterns found; the existing ignored development database was left untouched and the disposable smoke database was removed. |
 
-## Time and priorities
+## Historical assessment time and priorities
 
 - Initial priority / smallest runnable slice: Event aggregate and attendees -> create use case -> SQLite repository -> POST endpoint -> focused tests
 - Midpoint adjustment: environment/setup delay reduced the remaining implementation window to approximately 2 hours; prioritize the complete Must lifecycle, persistence/tests, then minimal observable notifications
@@ -124,18 +125,20 @@ Record each checkpoint only after its commit is verified in Git.
 | 2 | List, filter, and search with SQLite-backed tests | Complete | 4c6bfa9 - Implement event listing filtering and search |
 | 3 | Update and cancel with lifecycle tests | Complete | 6d08132 - Implement event update and cancellation |
 | 4 | Minimal observable notifications with tests | Complete | d8636d9 - Add a minimal observable notification boundary and infrastructure implementation |
-| 5 | Must-set stabilization and full smoke verification | Ready to commit | |
+| 5 | Must-set stabilization/full smoke | Executed; no separate checkpoint claimed | |
 | 6 | Lean Swagger UI, attendee response, and optimistic concurrency | Complete | 2e620c0 - Add lean concurrency, attendance responses, and Swagger documentation |
-| 7 | Final documentation, Git audit, commit/push, and submission preparation | Pending | |
+| 7 | Exception handling/documentation updates | Local commit verified; remote submission not rechecked | e190db0 |
+| 8 | Post-assessment analytical refactor | Local commit verified | 234d0ca |
+| 9 | Uniform organization and recent correctness improvements | Local commit verified | fbddcac |
 
 ## Handover
 
 - Implemented and verified: create, list/filter/search, update, soft cancellation, simple attendee response, optimistic concurrency, aggregate invariants, relational SQLite persistence, observable simulated notifications, OpenAPI/Swagger documentation, focused domain/application/infrastructure/API tests
-- Missing or unverified Must items: none currently identified
+- Notification capability is simulated; actual external delivery is not implemented or claimed. No independent assessment acceptance is implied.
 - Deferred Should/Could items: generated client, production documentation hosting, richer invitation workflow, automatic conflict resolution, availability checks
-- Known limitations: startup uses EnsureCreated rather than migrations; existing development databases must be recreated after schema changes; list results are not paginated; validation errors use one event-level domain error key
+- Known limitations: legacy adoption is blocked; use fresh/managed databases with migrations, preserving existing data; list results are not paginated; validation errors use one event-level domain error key
 - AI assistance: Phase 1-5 code/tests/documentation drafted with AI; clean build, tests, SQLite persistence, complete HTTP lifecycle behavior, simulated notification logging, OpenAPI output, reviewer startup, and repository hygiene executed locally
-- Git status: refactor changes are uncommitted; no staging, commit, push or remote changes performed. Existing untracked documentation and IDE files retained.
+- Git evidence: local HEAD before the earlier documentation pass was fbddcac and its working tree was clean; this structural pass preserved those existing uncommitted document changes. Earlier refactors are committed. This pass performs no staging/commit/push; remote state was not checked.
 - Commit-note clarification: the Phase 4 commit subject mentions failure handling, but the streamlined implementation intentionally defers external delivery-failure policy as documented above
 
 ## Organisation refactor verification (2026-10-08)
@@ -153,4 +156,76 @@ Record each checkpoint only after its commit is verified in Git.
 | Static compatibility and organisation audit | All 56 hand-authored type bodies unchanged; each top-level type matches its file and folder namespace. Program startup logic unchanged; private nested types retained. |
 | Existing database | Repository-root database SHA-256 unchanged. Default source-host connection path adjusted for the API move and verified using a relative disposable connection path. |
 
-See [REFACTORING.md](REFACTORING.md) for navigation and diagram guidance. No discovered correctness issue was repaired; existing limitations remain in scope documents.
+See [REFACTORING.md](REFACTORING.md) for navigation and diagram guidance. That organization pass preserved behaviour. Subsequent intentional correctness/contract improvements are recorded below.
+
+## Recent improvement verification - 8 October 2026
+
+These checks were executed during implementation/review. Build/tests were rerun during this documentation pass as distinguished below.
+
+| Check | Observed result |
+| --- | --- |
+| Baseline | Clean build and original 56 tests passed before adding new cases |
+| Timestamp/invalid-input tests | Missing/null/malformed values and invalid ranges/fields reject; storage snapshots unchanged and no publication |
+| Retrieval/resource discovery | GET present/missing/cancelled and following POST Location; reads do not mutate/notify |
+| Migration CLI | Fresh disposable schema created; pending-model check reported no model changes |
+| Initialization | Fresh/repeated managed initialization succeeds; legacy fixture/copy refused without reset |
+| Actual working-database copy | Startup refused absent history; disposable copy checksum unchanged; original database preserved |
+| Stable identity | Retention/addition/removal, attendance omission/explicit values, foreign/duplicate IDs, duplicate emails, stale/cancelled requests |
+| Relational reconciliation | SQLite swaps succeed; stale-writer and injected final-email phase failure roll back and do not publish |
+| Publication failure | Create/update can return 500 after persistence; accurate save-then-notify ordering retained |
+| Executable OpenAPI | Required timestamps, optional update IDs/attendance, GET route and POST Location metadata verified |
+| Separate Kestrel/disposable-database smoke | Create/Location/GET, timestamp rejection, identity/email swaps, stale 409, attendance/cancellation; migrated history inspected |
+| Smoke notification logs | Created once, Updated three times, Cancelled once; repeated cancellation did not republish |
+| Minimal review comments | Five comments explain recent fixes; neither original review mechanism materially changed |
+
+Only the initial migration exists. No later-version upgrade or successful legacy baseline was delivered; legacy transition is blocked pending a reviewed adoption process. No simultaneous HTTP load or actual external delivery is claimed.
+
+## Documentation-pass verification - 8 October 2026
+
+`dotnet build AppointmentScheduler.slnx --no-restore`: succeeded, 0 warnings/errors.
+
+`dotnet test AppointmentScheduler.slnx --no-build --no-restore`: **123 passed, 0 failed/skipped**.
+
+README setup was also re-executed: dotnet tool restore and fresh database update succeeded; pending-model check found no changes. A new Kestrel smoke on port 5188 verified POST 201, following Location to GET 200, supplied-ID retention with omitted attendance preservation, ID-less addition and OpenAPI 200. The separate disposable database was used; the working database was not selected.
+
+Documents are reconciled against current source/configuration/tests, retaining historical evidence as historical. Original employer brief/transcription remain unchanged. Source/tests/configuration and the working database are checked for unchanged content after the prose update. No new DGML rendering, production deployment, remote publication or automatic legacy transition is claimed.
+
+## Earlier structure refinement verification - 8 October 2026
+
+Repeated Events containers were removed across production/tests. API/Application retain direct use-case folders; Domain types are at project root with Validation. Infrastructure Persistence now groups the complete SQLite concern; both API OpenAPI transformers live in OpenApi. Four projects, boundary messages and narrow ports are retained because they enforce responsibilities and substitution rather than speculative extensibility. No behavioural redesign was introduced.
+
+| Check | Observed result |
+| --- | --- |
+| Baseline build/test | 0 warnings/errors; 123 passed, 0 failed/skipped |
+| Final build/test | 0 warnings/errors; 123 passed, 0 failed/skipped |
+| Namespace/type/file audit | 74 file moves; 84 non-Program hand-authored files match their type/name/folder namespace; Program/generated/private nested arrangements retained |
+| Implementation preservation | All 88 source/test files unchanged after namespace/import/CLR-identity normalization |
+| EF model/SQL | No pending model changes; initial migration SQL byte-identical before/after; existing migration ID retained |
+| Managed-data restart | Pre-refactor populated disposable database loads with identical event/attendee IDs, attendance, version, schema and history |
+| Fresh schema | Initial migration successfully creates a separate fresh disposable database |
+| HTTP metadata | Entire OpenAPI document exactly equal before/after |
+| Real Kestrel smoke | Retained email swap/attendance, stale 409, timestamp omission 400, PATCH, cancellation/repetition, cancelled GET, list, POST/Location and missing-ID 404 pass |
+| Protected content | Working database, project/runtime configuration and original assessment unchanged; pre-existing documentation edits incorporated |
+| Documentation audit | Relative links and explicit source/test paths resolve; fenced code blocks and git diff whitespace check pass |
+
+No check failed. DGML generation/Visual Studio rendering, production deployment, external notification delivery and simultaneous HTTP load remain unperformed. This pass changes C# namespaces/source paths, not HTTP contracts or database schema. Save-then-notify and shared event-version semantics are preserved. No new migration was created; no staging, commit or publication was performed.
+
+## Artifact grouping verification - 9 October 2026
+
+The user prefers artifact-based directory scanning. API now separates Controllers, Requests and Responses; Application separates Handlers, Commands, Queries, Inputs, Results, Interfaces and Exceptions. Domain distinguishes Entities/Inputs/errors/validation. Infrastructure distinguishes contexts, configurations, repositories, initialization, migrations and notification publishers. API test fixtures are separate; tests group by the artifact/concern tested. Four projects, operation/type names, private nested helpers and Program are retained. Pre-existing code/document changes were preserved.
+
+| Check | Observed result |
+| --- | --- |
+| Baseline build/test | Build 0 warnings/errors; 123 passed, 0 failed/skipped |
+| Initial relocation build | Missing AddInfrastructure extension import; restored before final checks |
+| Final build/test | Build 0 warnings/errors; 123 passed, 0 failed/skipped |
+| Artifact relocation | 76 file moves; filenames/type names retained, namespaces/imports synchronized |
+| EF model/SQL | No pending model changes; generated initial migration SQL byte-identical |
+| HTTP metadata | Exact full OpenAPI equality before/after |
+| Existing managed data | Populated disposable database retains identical event/attendee IDs, attendance, version, schema and migration history on restart |
+| Fresh database | Initial migration creates a separate disposable schema |
+| Kestrel smoke | Create/Location/GET, retained email swap/attendance, stale 409, missing timestamp 400, PATCH, cancellation/repetition, cancelled GET, list, missing-ID 404 and Swagger pass |
+| Static/document audit | All 88 implementations retained; 84 non-Program hand-authored type/file/namespaces match; relative links/explicit paths resolve, migration commands updated |
+| Protected content | Working database, configuration, project files and original assessment unchanged |
+
+The transient import failure is resolved; no final verification failure remains. No new migration, commit/push, production deployment, external delivery or DGML rendering was performed. C# namespace imports change; HTTP/database behaviour and the save-then-notify/shared-version review mechanisms do not.

@@ -1,0 +1,27 @@
+using AppointmentScheduler.Domain.Entities;
+
+namespace AppointmentScheduler.Application.Notifications;
+
+public sealed record EventNotification(
+    EventNotificationType Type,
+    Guid EventId,
+    string Title,
+    DateTimeOffset StartTime,
+    DateTimeOffset EndTime,
+    IReadOnlyCollection<string> RecipientEmailAddresses)
+{
+    public static EventNotification FromEvent(
+        CalendarEvent calendarEvent,
+        EventNotificationType type)
+    {
+        return new EventNotification(
+            type,
+            calendarEvent.Id,
+            calendarEvent.Title,
+            calendarEvent.StartTime,
+            calendarEvent.EndTime,
+            calendarEvent.Attendees
+                .Select(attendee => attendee.EmailAddress)
+                .ToArray());
+    }
+}

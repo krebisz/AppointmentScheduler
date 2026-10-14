@@ -1,14 +1,9 @@
-using AppointmentScheduler.Application.Events.Cancel;
-using AppointmentScheduler.Application.Events.Create;
-using AppointmentScheduler.Application.Events.Attendance;
-using AppointmentScheduler.Application.Events.List;
-using AppointmentScheduler.Application.Events.Get;
-using AppointmentScheduler.Application.Events.Update;
 using AppointmentScheduler.Infrastructure;
-using AppointmentScheduler.Infrastructure.Persistence;
 using AppointmentScheduler.Api.ErrorHandling;
 using AppointmentScheduler.Api.OpenApi;
-using AppointmentScheduler.Api.Events.Update;
+using AppointmentScheduler.Application.Handlers;
+using AppointmentScheduler.Infrastructure.DatabaseInitialization;
+using AppointmentScheduler.Infrastructure.DbContexts;
 
 var builder = WebApplication.CreateBuilder(args);
 

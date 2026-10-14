@@ -1,6 +1,6 @@
 # Appointment Scheduler — consolidated technical reference
 
-Prepared 2 October 2026; learning priorities reconciled 5 October 2026 against the technical-review and earlier professional assessments. This revision uses the supplied `01-TECHNICAL_REFERENCE.md` as its base. Implementation claims retain their 2 October source-check status; the code and tests were not rechecked for this revision.
+Prepared 2 October 2026; learning priorities reconciled 5 October against the technical-review and earlier professional assessments. Implementation descriptions updated against the current source/configuration on 9 October 2026; build and all 123 tests rerun successfully. Historical learning evidence is retained as historical.
 
 ## Contents
 
@@ -35,12 +35,12 @@ The domain has `CalendarEvent` and `Attendee`, with no separate reservation/book
 
 ### How to read claims
 
-- **Current implementation:** verified in source, configuration or selected tests on 2 October 2026.
+- **Current implementation:** checked against source/configuration and the current 123-test suite on 9 October 2026.
 - **Recorded rationale:** documented in the assessment-day worklog, without attributing independent authorship.
 - **Static risk:** inferred from code; not reproduced in this session.
 - **Proposed extension:** absent from the submitted implementation.
 
-The README/worklog record a clean build and **56 passing tests**. These were not rerun because `dotnet` was unavailable. The historical submitted commit and deployment were not independently verified.
+Current verification: SDK 10.0.401; build 0 warnings/errors; **123 passed, 0 failed/skipped**. The original suite had 56 tests. Local Git checkpoints were inspected; remote submission and production deployment were not reverified.
 
 ### Existing documentation: role and reconciliation
 
@@ -49,11 +49,11 @@ The README/worklog record a clean build and **56 passing tests**. These were not
 | `NET Technical Test.pdf` | Authoritative employer brief. |
 | `ASSESSMENT.md` | Searchable requirements and email clarifications; Must/Should/Could scope. |
 | `README.md` | Build/run commands, request examples and endpoint contract. |
-| `WORKLOG.md` | Historical decisions and execution evidence; some final-status claims are stale. |
+| `WORKLOG.md` | Historical decisions and current execution evidence; assessment-era checks are labelled historical. |
 | `ARCHITECTURE.md` | Structure, runtime behaviour and tests. |
 | `IMPLEMENTATION_GUIDE.md` | Source locations, workflows and debugging. |
 | `DECISIONS_AND_LIMITATIONS.md` | Decision costs, guarantees and future work. |
-| `AGENTS.md` | Internal assessment-agent guidance; historical context, not runtime behaviour. |
+| `AGENTS.md` | Agent guidance with current learning conventions and historical assessment context; not runtime behaviour. |
 
 This guide consolidates their technical explanations. The requirements brief and source code remain authoritative.
 
@@ -78,13 +78,13 @@ The brief permits partial delivery and values decisions, assumptions, documentat
 
 | Project | Main files and responsibility | Project dependencies |
 | --- | --- | --- |
-| `src/AppointmentScheduler.Api` | `Program.cs`; `src/AppointmentScheduler.Api/Controllers/EventsController.cs`; HTTP contracts; `ApiExceptionHandler`; host configuration and OpenAPI | Application, Infrastructure; Domain types are also accessible through the dependency graph. |
+| `src/AppointmentScheduler.Api` | `Program.cs`; `Controllers/` under `src/AppointmentScheduler.Api`; HTTP contracts; `ApiExceptionHandler`; host configuration and OpenAPI | Application, Infrastructure; Domain types are also accessible through the dependency graph. |
 | `src/AppointmentScheduler.Application` | Use-case handlers, commands/results, persistence and notification interfaces | Domain |
-| `src/AppointmentScheduler.Domain` | `Events/CalendarEvent.cs`: aggregate and business rules; `Events/Attendee.cs` and `Events/AttendeeDetails.cs` define attendee types | No other solution project |
+| `src/AppointmentScheduler.Domain` | `CalendarEvent.cs`: aggregate and business rules; `Attendee.cs` and `AttendeeDetails.cs` define attendee types | No other solution project |
 | `src/AppointmentScheduler.Infrastructure` | EF repository/context, SQLite configuration and logging adapter | Application and Domain |
 | `tests/AppointmentScheduler.Tests` | Domain, application, infrastructure and HTTP tests | Production projects |
 
-The root is **a Web API executable**, using `Microsoft.NET.Sdk.Web` and targeting `net10.0`.
+The API project under `src/AppointmentScheduler.Api` is the Web executable using `Microsoft.NET.Sdk.Web` and targeting `net10.0`; the repository root contains solution/tool configuration.
 
 Controllers handle routes, binding, model validation, status codes and response types. `ApiExceptionHandler` converts exceptions into HTTP Problem Details. Both belong at the API boundary, keeping HTTP concerns outside business rules and persistence.
 
@@ -111,6 +111,12 @@ At runtime handlers call interfaces implemented by injected infrastructure objec
 
 Handlers are called directly, without MediatR, a command bus, generic repository or domain-event dispatcher. Separate read/write handlers do not establish full CQRS.
 
+### Artifact grouping within project boundaries
+
+The current convention groups API controllers, requests and responses in separate directories. Application similarly groups handlers, commands, queries, inputs, results, interfaces and exceptions. Notification payload/enum remain together. Domain separates entities, operation inputs, errors and validation. Infrastructure groups DbContexts, Configurations, Repositories, DatabaseInitialization, Migrations and NotificationPublishers. Tests group by the artifact/concern exercised; API Fixtures holds reusable hosting/session helpers.
+
+This preference makes a project directory expose its composition. Operation names connect CreateEventController, CreateEventRequest, CreateEventHandler and CreateEventCommand across artifact groups. The folders are organizational; the four projects still enforce dependency boundaries. Artifact and use-case grouping are both valid conventions, but the current checkout uses artifacts. Do not add an Events wrapper or label domain input records as value objects merely to fill a folder.
+
 ### Layers versus vertical slices
 
 Layers separate responsibilities; a delivery slice crosses them to complete one operation. The create slice includes controller, command, handler, domain creation, persistence and tests.
@@ -123,19 +129,19 @@ Layers separate responsibilities; a delivery slice crosses them to complete one 
 | --- | --- | --- |
 | Create host builder | `WebApplication.CreateBuilder(args)` | Establish host/configuration/service-registration facilities. |
 | Register API services | `AddControllers`, `AddProblemDetails`, `AddExceptionHandler<ApiExceptionHandler>`, `AddOpenApi` | Enable controllers, API error handling and document generation. |
-| Register use cases | Five `AddScoped<...Handler>()` calls | Make handlers available to controller construction. |
+| Register use cases | Six `AddScoped<...Handler>()` calls | Make handlers available to controller construction. |
 | Register infrastructure | `AddInfrastructure(connectionString)` | Register SQLite context, repository and notification adapter. |
 | Build app | `builder.Build()` | Build the host/service provider; this does not yet begin listening. |
 | Configure request pipeline | `UseExceptionHandler`, `UseStatusCodePages`, environment branches, `UseAuthorization` | Configure shared HTTP behaviour. |
 | Register controller endpoints | `MapControllers()` | Map controller route/action metadata. |
-| Initialize database | `CreateAsyncScope` → `GetRequiredService<SchedulerDbContext>()` → `Database.EnsureCreatedAsync()` | Create a fresh database/schema if necessary before starting the host. |
+| Initialize database | `CreateAsyncScope` → context resolution → `SchedulerDatabaseInitializer.InitializeAsync()` → guarded `MigrateAsync()` | Apply migrations to fresh/managed databases before listening; refuse legacy tables without history. |
 | Run host | `app.Run()` | Start the application and normally listen through Kestrel until shutdown. |
 
 `public partial class Program;` exposes the generated top-level program type for `WebApplicationFactory<Program>` tests.
 
 ### How controllers obtain handlers
 
-ASP.NET Core activates `EventsController`, resolving its five primary-constructor handler parameters and their repository/publisher dependencies.
+ASP.NET Core activates the matched use-case controller, resolving its single handler and that handler's repository/publisher dependencies.
 
 Handler registrations include:
 
@@ -144,7 +150,7 @@ builder.Services.AddScoped<CreateEventHandler>();
 builder.Services.AddScoped<UpdateEventHandler>();
 ```
 
-Infrastructure registrations live in **`src/AppointmentScheduler.Infrastructure/DependencyInjection.cs`**, called by `Program.cs`:
+Infrastructure registrations live in **`src/AppointmentScheduler.Infrastructure/InfrastructureServiceCollectionExtensions.cs`**, called by `Program.cs`:
 
 ```csharp
 services.AddDbContext<SchedulerDbContext>(options => options.UseSqlite(connectionString));
@@ -188,7 +194,7 @@ Configuration is read from normal .NET providers. The SQLite setting is `Connect
 
 ## 4. Domain entities, aggregate ownership and validation
 
-`CalendarEvent`, `Attendee`, and `AttendeeDetails` each have a matching file under **`src/AppointmentScheduler.Domain/Events/`**. `ValidatedEventDetails` remains private inside `CalendarEvent`.
+`CalendarEvent`, `Attendee`, and `AttendeeDetails` each have a matching file under **`src/AppointmentScheduler.Domain/`**. `ValidatedEventDetails` remains private inside `CalendarEvent`.
 
 ```mermaid
 classDiagram
@@ -227,7 +233,7 @@ EF owned types express this design in persistence. DDD requires neither EF owner
 
 | Rule | Current enforcement |
 | --- | --- |
-| Required title/description | API annotations and Domain `RequiredText` |
+| Required title/description | API annotations and Domain `RequiredTextValidator.ValidateAndNormalize` |
 | Title ≤ 200; description ≤ 2,000 characters | API and Domain; EF model also records lengths |
 | Required attendee name/email; name ≤ 200, email ≤ 320 | API and Domain |
 | Valid email | API email annotation; Domain `MailAddress.TryCreate` and address comparison |
@@ -236,38 +242,39 @@ EF owned types express this design in persistence. DDD requires neither EF owner
 | Unique attendee emails within event, ignoring case | Domain grouping with `StringComparer.OrdinalIgnoreCase` |
 | End later than start | Domain compares normalized UTC instants |
 | Cancelled events cannot update/change attendance | Domain methods |
-| Attendee must belong to event | `CalendarEvent.SetAttendance` lookup |
-| Event version | Starts at 1; increments during successful state-changing domain operations |
+| Attendee must belong to event | `CalendarEvent.SetAttendance` and update supplied-ID membership checks |
+| Event version | Starts at 1; every valid PUT and changed attendance/first cancellation increment it |
 
-`Create` validates before constructing an event and assigns a new GUID. `ValidateDetails` calls `Attendee.Create`, which assigns each attendee a new GUID.
+`Create` builds candidate attendees through `Attendee.Create`, validates complete details and assigns a new event GUID. Update builds validated replacement candidates before applying changes to retained instances.
 
-`Update` rejects cancelled state, validates the entire replacement, then assigns properties, clears/rebuilds the attendee collection and increments the version. **Validation precedes mutation**, avoiding partly applied updates when validation fails.
+`Update` rejects cancelled state and validates the entire replacement, including supplied ID membership/duplicates and email uniqueness, before applying it. Supplied IDs retain instances/identity; missing IDs add; omitted children are removed. **Validation precedes mutation**, avoiding partly applied updates.
 
-Even an identical PUT recreates attendee IDs and increments the version; unchanged replacements are not detected.
+Even an identical PUT increments version, saves and publishes; unchanged replacements are not detected. Supplied IDs retain identity; omitted IDs create additions, without email matching.
 
 `Cancel` returns `false` if already cancelled. The handler then skips save and notification. `SetAttendance` returns `false` if the existing boolean matches; its handler also skips save/notification. The attendance version check occurs before this no-op decision, so an already-stale request still receives 409.
 
-### Timestamp-presence gap — static risk
+### Explicit timestamp presence and attendance semantics
 
-Create/update contracts use non-nullable `DateTimeOffset StartTime` and `EndTime` without explicit required-presence enforcement or JSON required-constructor configuration. Omission can produce a default value. A missing start with a valid later end may therefore satisfy `end > start` while storing a year-0001 start.
+Create/update use non-nullable `DateTimeOffset` with `[property: JsonRequired]` on both timestamps. Omitted, null or malformed values return 400. RequiredTimestampTests cover each field on both operations and assert unchanged storage/no publication.
 
-Binding can reject malformed/null timestamps without detecting omission. Proposed remedies: nullable required fields or JSON-required metadata/configuration, plus omission tests. Field presence and valid business dates are separate rules.
+Explicit JSON presence prevents silent defaults. Domain still requires end later than start and normalizes UTC. Presence and a minimum business calendar date are separate rules; no minimum date policy was added.
 
-`SetAttendanceRequest` deliberately uses `[Required] bool?` to distinguish omission/null from explicit `false`. Create/update attendee `IsAttending` is a non-nullable boolean, so omission defaults to false; the model cannot distinguish pending invitation from rejection.
+`SetAttendanceRequest` deliberately uses `[Required] bool?` to distinguish omission/null from explicit `false`. Create attendee attendance defaults false. Update uses optional nullable attendance: omitted/null preserves a retained attendee's value and defaults false for additions; explicit true/false replaces it. The boolean still cannot distinguish pending invitation from rejection.
 
 ## 5. HTTP contract and response semantics
 
-Routes live in **`src/AppointmentScheduler.Api/Controllers/EventsController.cs`**; contracts for all operations live in **`src/AppointmentScheduler.Api/Events/`**.
+Routes live in **`Controllers/` under `src/AppointmentScheduler.Api`**; contracts live in API **Requests/** and **Responses/**.
 
 | Request | Controller action | Application method | Successful response |
 | --- | --- | --- | --- |
-| `GET /api/events` | `List` | `ListEventsHandler.HandleAsync` | 200 plus event array |
-| `POST /api/events` | `Create` | `CreateEventHandler.HandleAsync` | 201 plus `CreateEventResponse` |
-| `PUT /api/events/{id}` | `Update` | `UpdateEventHandler.HandleAsync` | 200 plus `UpdateEventResponse` |
-| `DELETE /api/events/{id}` | `Cancel` | `CancelEventHandler.HandleAsync` | 204, no body |
-| `PATCH /api/events/{eventId}/attendees/{attendeeId}/attendance` | `SetAttendance` | `SetAttendanceHandler.HandleAsync` | 204, no body |
+| `GET /api/events/{id}` | `GetEventController.GetAsync` | `GetEventHandler.HandleAsync` | 200 plus GetEventResponse |
+| `GET /api/events` | `ListEventsController.ListAsync` | `ListEventsHandler.HandleAsync` | 200 plus event array |
+| `POST /api/events` | `CreateEventController.CreateAsync` | `CreateEventHandler.HandleAsync` | 201 plus `CreateEventResponse` |
+| `PUT /api/events/{id}` | `UpdateEventController.UpdateAsync` | `UpdateEventHandler.HandleAsync` | 200 plus `UpdateEventResponse` |
+| `DELETE /api/events/{id}` | `CancelEventController.CancelAsync` | `CancelEventHandler.HandleAsync` | 204, no body |
+| `PATCH /api/events/{eventId}/attendees/{attendeeId}/attendance` | `SetAttendanceController.SetAttendanceAsync` | `SetAttendanceHandler.HandleAsync` | 204, no body |
 
-There is no public `GET /api/events/{id}`. `GetByIdAsync` is an internal repository lookup used for mutations. Clients currently list events and find the relevant ID.
+`GET /api/events/{id}` uses GetEventHandler/GetEventQuery and returns details, attendees, cancellation state and version. Unknown IDs return 404; cancelled events return 200. It reuses tracked GetByIdAsync without mutation/save/publication.
 
 **200 OK** signals success with the requested or updated representation. **201 Created** signals creation of a resource. **204 No Content** signals success without a response body; it does not mean nothing happened.
 
@@ -276,10 +283,10 @@ A representation is the JSON form of event data exposed to callers. List returns
 The creation action actually uses:
 
 ```csharp
-return StatusCode(StatusCodes.Status201Created, response);
+return CreatedAtRoute(GetEventController.RouteName, new { id = result.Id }, response);
 ```
 
-It does **not** call `Created()` and does not set a `Location` header. A single-event GET plus `CreatedAtAction` would provide a clearer discoverable resource location.
+`CreatedAtRoute` resolves the named GET route and adds Location while preserving the creation body. Retrieval and following Location are tested; resource discovery does not provide POST idempotency.
 
 ### DTO boundaries
 
@@ -315,18 +322,18 @@ Startup runs once; handlers run per request. Creation follows this chain; reads 
 flowchart TD
     A["Program.cs: CreateBuilder and service registrations"] --> B["Program.cs: builder.Build()"]
     B --> C["Configure middleware and MapControllers()"]
-    C --> D["Startup scope: Database.EnsureCreatedAsync()"]
+    C --> D["Startup scope: guarded migrations"]
     D --> E["app.Run(): Kestrel listens"]
     E --> F["Caller: POST /api/events"]
     F --> G["Routing, controller activation, binding and validation"]
-    G --> H["EventsController.Create(): request → command"]
+    G --> H["CreateEventController.CreateAsync(): request → command"]
     H --> I["CreateEventHandler.HandleAsync()"]
     I --> J["CalendarEvent.Create() → ValidateDetails() → Attendee.Create()"]
-    J --> K["EfEventRepository.AddAsync()"]
+    J --> K["EfEventRepository.AddAndSaveAsync()"]
     K --> L["Events.AddAsync() → DbContext.SaveChangesAsync() → SQLite"]
-    L --> M["EventNotification.From() → LoggingEventNotificationPublisher.PublishAsync()"]
+    L --> M["EventNotification.FromEvent() → LoggingEventNotificationPublisher.PublishAsync()"]
     M --> N["Handler returns CreateEventResult"]
-    N --> O["Controller maps CreateEventResponse and returns StatusCode(201, response)"]
+    N --> O["Controller maps CreateEventResponse and returns CreatedAtRoute with Location"]
     O --> P["ASP.NET serializes JSON; Kestrel sends response"]
 ```
 
@@ -334,41 +341,45 @@ File locations along this chain:
 
 | Class/member | File relative to repository root |
 | --- | --- |
-| Host composition/startup | `Program.cs` |
-| `EventsController.Create` and response mapping | `src/AppointmentScheduler.Api/Controllers/EventsController.cs` |
-| HTTP create contracts | `src/AppointmentScheduler.Api/Events/` |
-| Create handler, commands/results | `src/AppointmentScheduler.Application/Events/Create/` (one type per file) |
-| `CalendarEvent.Create`, `ValidateDetails`, `Attendee.Create` | `src/AppointmentScheduler.Domain/Events/CalendarEvent.cs` and `Attendee.cs` |
-| `EfEventRepository.AddAsync` | `src/AppointmentScheduler.Infrastructure/Persistence/EfEventRepository.cs` |
-| Context/model | `src/AppointmentScheduler.Infrastructure/Persistence/SchedulerDbContext.cs` |
-| Notification contract and `EventNotification.From` | `src/AppointmentScheduler.Application/Events/Notifications/IEventNotificationPublisher.cs` |
-| Logger adapter | `src/AppointmentScheduler.Infrastructure/Notifications/LoggingEventNotificationPublisher.cs` |
+| Host composition/startup | `src/AppointmentScheduler.Api/Program.cs` |
+| `CreateEventController.CreateAsync` and response mapping | `src/AppointmentScheduler.Api/Controllers/CreateEventController.cs` |
+| HTTP create contracts | API `Requests/` and `Responses/` |
+| Create handler, commands/results | Application `Handlers/`, `Commands/`, `Inputs/`, `Results/` (one type per file) |
+| `CalendarEvent.Create`, `ValidateDetails`, `Attendee.Create` | `src/AppointmentScheduler.Domain/Entities/CalendarEvent.cs` and `Attendee.cs` |
+| `EfEventRepository.AddAndSaveAsync` | `src/AppointmentScheduler.Infrastructure/Repositories/EfEventRepository.cs` |
+| Context/model | `src/AppointmentScheduler.Infrastructure/DbContexts/SchedulerDbContext.cs` |
+| Notification contract/factory | `src/AppointmentScheduler.Application/Interfaces/IEventNotificationPublisher.cs` and `EventNotification.cs` (`FromEvent`) |
+| Logger adapter | `src/AppointmentScheduler.Infrastructure/NotificationPublishers/LoggingEventNotificationPublisher.cs` |
 
-`EfEventRepository.AddAsync` both adds **and saves**. EF's `DbSet.AddAsync` alone normally tracks the new object; it is the following `SaveChangesAsync` that persists it. Creation calls the context save directly, while mutation handlers use the repository's save wrapper.
+`EfEventRepository.AddAndSaveAsync` both adds **and saves**. EF's `DbSet.AddAsync` alone normally tracks the new object; it is the following `SaveChangesAsync` that persists it. Creation calls the context save directly, while mutation handlers use the repository's save wrapper.
+
+### Retrieval by ID
+
+Caller GET by ID calls GetEventController.GetAsync, GetEventHandler.HandleAsync and repository GetByIdAsync; the handler maps GetEventResult/GetAttendeeResult and the controller returns GetEventResponse. Cancelled events are included; missing IDs throw the mapped not-found exception. No mutation/save/publication occurs. POST Location uses this named route.
 
 ### Listing, filtering and searching
 
-Caller GET → Kestrel/pipeline → `EventsController.List` → `ListEventsHandler.HandleAsync` → normalize filters/build `EventQuery` → `EfEventRepository.ListAsync` → build no-tracking LINQ query → `ToListAsync` executes against SQLite → handler maps `ListedEventResult[]` → controller maps `EventListItemResponse[]` → `Ok(...)` → JSON/HTTP 200.
+Caller GET → Kestrel/pipeline → `ListEventsController.ListAsync` → `ListEventsHandler.HandleAsync` → normalize filters/build `EventRepositoryQuery` → `EfEventRepository.ListAsync` → build no-tracking LINQ query → `ToListAsync` executes against SQLite → handler maps `ListEventItemResult[]` → controller maps `ListEventItemResponse[]` → `Ok(...)` → JSON/HTTP 200.
 
 Reads materialize stored entities without domain mutation or notifications.
 
 ### Full update
 
-Caller PUT → `EventsController.Update` maps request → `UpdateEventHandler.HandleAsync` → `GetByIdAsync` loads tracked event/attendees → reject missing event or mismatched request version → `CalendarEvent.Update` validates/replaces/increments version → repository `SaveChangesAsync` → EF save-time check/SQLite transaction → publish `Updated` → return `UpdateEventResult` → controller `Ok(UpdateEventResponse)` → HTTP 200.
+Caller PUT → `UpdateEventController.UpdateAsync` maps request → `UpdateEventHandler.HandleAsync` → `GetByIdAsync` loads tracked event/attendees → reject missing event or mismatched request version → `CalendarEvent.Update` validates/replaces/increments version → repository `SaveChangesAsync` → EF save-time check/SQLite transaction → publish `Updated` → return `UpdateEventResult` → controller `Ok(UpdateEventResponse)` → HTTP 200.
 
 ### Attendance response
 
-Caller PATCH → `EventsController.SetAttendance` → `SetAttendanceHandler.HandleAsync` → tracked lookup/version check → `CalendarEvent.SetAttendance` → if changed, save and publish `Updated` → controller `NoContent()` → HTTP 204. An unchanged answer skips save/publication; stale version is checked first.
+Caller PATCH → `SetAttendanceController.SetAttendanceAsync` → `SetAttendanceHandler.HandleAsync` → tracked lookup/version check → `CalendarEvent.SetAttendance` → if changed, save and publish `Updated` → controller `NoContent()` → HTTP 204. An unchanged answer skips save/publication; stale version is checked first.
 
 ### Cancellation
 
-Caller DELETE → `EventsController.Cancel` → `CancelEventHandler.HandleAsync` → tracked lookup → `CalendarEvent.Cancel` → if first cancellation, save and publish `Cancelled` → controller `NoContent()` → HTTP 204. Repetition returns 204 without another write or notification. No client version is supplied for cancellation.
+Caller DELETE → `CancelEventController.CancelAsync` → `CancelEventHandler.HandleAsync` → tracked lookup → `CalendarEvent.Cancel` → if first cancellation, save and publish `Cancelled` → controller `NoContent()` → HTTP 204. Repetition returns 204 without another write or notification. No client version is supplied for cancellation.
 
 ## 7. EF Core, SQLite and query execution
 
 ### Model mapping
 
-`SchedulerDbContext.OnModelCreating` defines:
+`CalendarEventConfiguration` defines the mapping; `SchedulerDbContext.OnModelCreating` applies it:
 
 | Mapping | Meaning |
 | --- | --- |
@@ -411,11 +422,11 @@ Writes normalize instants to UTC; the converter stores 100-nanosecond ticks rela
 
 ### Tracking and transactions
 
-`GetByIdAsync` includes attendees and uses tracking because a mutation follows. EF remembers original values, including the original version, and detects changed objects at save time. The aggregate can increment its current version without losing EF's original concurrency value.
+`GetByIdAsync` includes attendees and uses tracking for mutation and GET-by-ID paths. The read handler does not modify/save it. EF remembers original values, including the original version, and detects changed objects at save time. The aggregate can increment its current version without losing EF's original concurrency value.
 
 `ListAsync` uses `AsNoTracking` to avoid tracking overhead while still materializing results. Its redundant `AsQueryable` call does not load data; execution waits for `ToListAsync`.
 
-The normal EF save transaction makes the related event/attendee writes atomic. Notification publication is outside that transaction. No separate unit-of-work abstraction or explicit cross-system transaction is implemented.
+Normal EF saves make related event/attendee writes atomic. Retained email edits use two saves inside one explicit transaction: temporary unique emails then final values, allowing swaps under the immediate SQLite unique index. Conflict/final-phase failure rolls back database changes and restores in-memory final email values. Notification publication is outside that transaction. No separate unit-of-work abstraction or explicit cross-system transaction is implemented.
 
 ### Filter semantics and execution
 
@@ -433,7 +444,7 @@ LINQ builds the query; `ToListAsync` executes/materializes it before the handler
 
 ### Schema creation
 
-`EnsureCreatedAsync` supports initializing a fresh schema, not evolving an old one. There are no EF migrations or seed data. Existing database files persist across restarts. If the model changes, use a new database file for study or explicitly back up/reset the old one; schema-upgrade support was deliberately deferred.
+An initial EF migration/model snapshot now exist. SchedulerDatabaseInitializer refuses existing user tables without migration history before MigrateAsync, while fresh/managed databases receive pending migrations. No seed or automatic legacy adoption exists. Preserve the working legacy database and choose a separate path; the design factory requires an explicit connection variable. See README migration commands; never blindly apply initial migrations or reset data.
 
 ## 8. Concurrency, idempotency and independent attendee responses
 
@@ -583,37 +594,39 @@ sequenceDiagram
     A->>U: HandleAsync(CreateEventCommand)
     U->>D: CalendarEvent.Create()
     D-->>U: Valid aggregate
-    U->>I: EfEventRepository.AddAsync(): track and save
+    U->>I: EfEventRepository.AddAndSaveAsync(): track and save
     I-->>U: Save completed
     U->>I: PublishAsync(): logging adapter
     I-->>U: Completed
     U-->>A: CreateEventResult
-    A-->>H: CreateEventResponse, HTTP 201 JSON
+    A-->>H: CreateEventResponse, HTTP 201 JSON and Location
 ```
 
-`ApiFactory : WebApplicationFactory<Program>` lives in **`tests/AppointmentScheduler.Tests/Api/ApiFactory.cs`**.
+`AppointmentSchedulerApiFactory : WebApplicationFactory<Program>` lives in **`tests/AppointmentScheduler.Tests/Api/Fixtures/AppointmentSchedulerApiFactory.cs`**.
 
 `CreateClient()` initializes the host when needed and connects HttpClient to TestServer. The real middleware, controllers, DI, handlers, domain, repository and serializer execute, without Kestrel socket listening.
 
-`ApiFactory.ConfigureWebHost` removes the original `DbContextOptions<SchedulerDbContext>` registration and configures SQLite at a unique temporary file path with pooling disabled. Tests can additionally replace repository/publisher registrations to inject failures. Disposing the factory disposes the host, clears pools and deletes its temporary database file.
+`AppointmentSchedulerApiFactory.ConfigureWebHost` removes the original `DbContextOptions<SchedulerDbContext>` registration and configures SQLite at a unique temporary file path with pooling disabled. Tests can additionally replace repository/publisher registrations to inject failures. Disposing the factory disposes the host, clears pools and deletes its temporary database file.
 
-**Isolation is per factory**, not automatically per request or every test method. `IClassFixture<ApiFactory>` shares a factory across tests in a class; changing data assumptions requires care. Startup's `EnsureCreatedAsync` also executes against the test database.
+**Isolation is per factory**, not automatically per request or every test method. `IClassFixture<AppointmentSchedulerApiFactory>` shares a factory across tests in a class; changing data assumptions requires care. Startup's guarded migration initializer also executes against the test database. EnsureCreated is retained only in the deliberate legacy-refusal fixture.
 
 Deployed calls use Kestrel and the configured persistent database. TestServer does not validate proxies, certificates, browser CORS or production infrastructure.
 
 ### Representative tests and their limits
 
-| Actual test | Meaning |
+| Actual test or focused test class | Meaning |
 | --- | --- |
-| `CreateEventEndpointTests.Post_creates_event_and_returns_created_response` | Checks 201, returned IDs/attendees and a persisted event/attendee query. |
-| `CreateEventEndpointTests.Post_rejects_invalid_time_range_without_persisting` | Checks 400; despite its name, does not assert unchanged database state. |
-| `EventLifecycleEndpointTests.Put_returns_conflict_when_the_supplied_version_is_stale` | Exercises stale version rejection through HTTP. |
-| `EventLifecycleEndpointTests.Patch_attendance_updates_the_attendee_and_event_version` | Exercises attendance/version changes. |
-| `EventConcurrencyTests.Save_rejects_the_second_writer_loaded_at_the_same_version` | Two contexts load one version, mutate, then save sequentially; second save raises mapped conflict. Not simultaneous request/load testing. |
-| `ErrorHandlingTests.Notification_failure_propagates_as_500_after_data_has_been_saved` | Injects a failing publisher, checks 500 and confirms one stored event. Documents a limitation. |
-| `ErrorHandlingTests.Save_failures_propagate_without_publishing_notifications` | Tests failure mapping and suppression of publication using injected failures. |
+| `CreateEventEndpointTests.Post_creates_event_and_returns_created_responseAsync` | Checks 201, returned IDs/attendees and a persisted event/attendee query. |
+| `CreateEventEndpointTests.Post_rejects_invalid_time_range_without_persistingAsync` | Checks 400; despite its name, does not assert unchanged database state. |
+| `EventLifecycleEndpointTests.Put_returns_conflict_when_the_supplied_version_is_staleAsync` | Exercises stale version rejection through HTTP. |
+| `EventLifecycleEndpointTests.Patch_attendance_updates_the_attendee_and_event_versionAsync` | Exercises attendance/version changes. |
+| `EfEventRepositoryConcurrencyTests.Save_rejects_the_second_writer_loaded_at_the_same_versionAsync` | Two contexts load one version, mutate, then save sequentially; second save raises mapped conflict. Not simultaneous request/load testing. |
+| `ErrorHandlingTests.Notification_failure_propagates_as_500_after_data_has_been_savedAsync` | Injects a failing publisher, checks 500 and confirms one stored event. Documents a limitation. |
+| `ErrorHandlingTests.Save_failures_propagate_without_publishing_notificationsAsync` | Tests failure mapping and suppression of publication using injected failures. |
 
-Coverage gaps include timestamp presence, attendee-ID continuity, length edges and independent-attendee contention. The suite does not validate absent features such as authentication, migrations or real delivery.
+Recent suites add explicit storage/no-publication evidence: RequiredTimestampTests, InvalidEventWriteTests, GetEventEndpointTests, UpdateAttendeeIdentityTests, AttendeeReplacementTests, SchedulerDatabaseInitializerTests, EfEventRepositoryReconciliationTests and EventOpenApiTests. The older invalid-range test's limited assertion is retained above rather than overstating it.
+
+Timestamp presence, identity continuity, invalid-write non-mutation, GET/Location, migrations/legacy refusal and relational reconciliation are now tested. Remaining gaps include actual simultaneous independent-attendee HTTP contention, successful legacy adoption/later-version upgrades and production operations. Authentication and real delivery remain absent.
 
 ## 13. Material decisions, alternatives and costs
 
@@ -626,8 +639,8 @@ Summary of benefits and costs; detailed behaviour appears in the preceding secti
 | Narrow repository/publisher ports | Substitute persistence/delivery and test orchestration | Indirection must retain a useful boundary; generic wrappers are unnecessary. |
 | SQLite | Easy relational setup without installing a server | File/write/multi-instance limitations; PostgreSQL or another server DB for suitable deployments. |
 | UTC integer storage | Provider-friendly chronology/filtering | Discards original offset/zone context. |
-| EnsureCreated | Quick fresh-database setup | No schema evolution; migrations later. |
-| Full replacement PUT | Simple complete input and validation | New attendee identities; stable-ID reconciliation is preferable where consumers retain references. |
+| Guarded migrations | Reproducible fresh creation/managed upgrades | Legacy adoption blocked; production deployment/recovery policy still required. |
+| Full replacement PUT with optional IDs | Complete validation and retained child identity/attendance | ID-less inputs create new identities; shared version/identical PUT writes remain. |
 | Soft cancellation | Preserve stored state; harmless repetition | Not an audit trail; every query must handle cancelled data. |
 | Logging notification | Observable boundary without external setup | No actual delivery guarantee. |
 | Save then notify | Never notify after an unsuccessful save | Persisted change can accompany 500; outbox/idempotency needed for reliability. |
@@ -657,7 +670,7 @@ Define audit, privacy/retention, logging, secrets and access to stored attendee 
 
 ### Migrations and operations
 
-Introduce EF migrations for versioned schema changes and a deliberate deployment process for applying them. Do not treat adding `MigrateAsync` to an existing EnsureCreated database as an automatic conversion. Plan data preservation/baselining or rebuild for the specific database, and test upgrades/rollback expectations.
+Initial EF migrations and guarded startup are implemented. Establish a deliberate deployment process for future migrations. Do not treat adding `MigrateAsync` to an existing EnsureCreated database as an automatic conversion. Plan a reviewed data-preserving baseline/transition on disposable copies, and test upgrades/rollback expectations.
 
 Production also needs database selection, backups/recovery, secrets, TLS termination, health/readiness, telemetry, alerting and CI/CD.
 
@@ -692,16 +705,16 @@ No Dockerfile/image exists in the submitted solution. A persistent volume surviv
 
 | Area | Proportionate next change |
 | --- | --- |
-| Timestamp presence | Explicit presence validation and omission tests. |
-| Attendee identity | Preserve stable IDs when updating existing attendees; specify matching/removal rules. |
+| Timestamp presence | Completed: JsonRequired and rejection/non-mutation tests on POST/PUT. |
+| Attendee identity | Completed: supplied-ID retention, additions/removals and attendance preservation; SQLite reconciliation tested. |
 | Duplicate creates and notification failure | Separate POST idempotency from notification durability; define responses and implement an outbox/worker if required. |
 | Group-event attendance concurrency | Specify whether independent responses should conflict; test and refine granularity. |
-| Test precision | Add actual non-persistence assertions and tests for correctness risks, not just more cases. |
-| HTTP resource discovery | Add appropriate single-event retrieval and creation Location header. |
+| Test precision | Completed for recent invalid-input risks: full storage/no-publication assertions and relational rollback tests. |
+| HTTP resource discovery | Completed: GET by ID including cancelled events and route-aware POST Location. |
 | Requirement completion | Generate and verify a typed client; decide on deliberate documentation access and actual notification delivery. |
 | Read scaling | Pagination, wildcard policy, index/search review and realistic query measurements. |
-| Production needs | Identity/resource authorization, migrations, operational guarantees and deployment. |
-| Documentation hygiene | Remove internal submission instructions when appropriate; repair stale worklog claims. |
+| Production needs | Identity/resource authorization, controlled migration deployment/legacy adoption, operational guarantees. |
+| Documentation hygiene | Updated current paths/contracts/setup/evidence; retained assessment and learning history as historical. |
 
 Add availability, recurrence and richer invitations only for explicit requirements. The unfinished Should client should be weighed against optional concurrency refinements.
 
@@ -709,16 +722,16 @@ Add availability, recurrence and richer invitations only for explicit requiremen
 
 | Question/change | Read first | Then inspect |
 | --- | --- | --- |
-| How does the host start/wire services? | `Program.cs` | Infrastructure `DependencyInjection.cs`, API csproj, launch settings |
-| How does POST work? | `EventsController.Create` | `CreateEventHandler` → `CalendarEvent.Create` → repository Add/save → publisher |
-| Why did validation fail? | Response errors / request contracts | Controller null checks → Domain `ValidateDetails`/`RequiredText` |
+| How does the host start/wire services? | `Program.cs` | Infrastructure `InfrastructureServiceCollectionExtensions.cs`, API csproj, launch settings |
+| How does POST work? | `CreateEventController.CreateAsync` | `CreateEventHandler` → `CalendarEvent.Create` → repository Add/save → publisher |
+| Why did validation fail? | Response errors / request contracts | Controller null checks → Domain `ValidateDetails`/`RequiredTextValidator.ValidateAndNormalize` |
 | Why 404? | Handler lookup | Repository `GetByIdAsync`; route match versus missing entity |
 | Why 409? | Request version / handler comparison | Domain increment → context token → repository save catch |
 | Why 500 after apparent success? | Trace ID/server log | Save/publication boundary; injected-failure tests |
-| How is data mapped? | `SchedulerDbContext.OnModelCreating` | Domain properties/backing field; SQLite provider behaviour |
+| How is data mapped? | `CalendarEventConfiguration` | Context application, Domain properties/backing field; SQLite provider behaviour |
 | Where does filtering execute? | `ListEventsHandler` | `EfEventRepository.ListAsync` and `ToListAsync` |
-| Where does accept/reject live? | `EventsController.SetAttendance` | Handler → aggregate attendee lookup/mutation |
-| How do HTTP tests use the app? | `ApiFactory.cs` in `tests/AppointmentScheduler.Tests/Api/` | TestServer, DI replacements and temporary SQLite lifecycle |
+| Where does accept/reject live? | `SetAttendanceController.SetAttendanceAsync` | Handler → aggregate attendee lookup/mutation |
+| How do HTTP tests use the app? | `AppointmentSchedulerApiFactory.cs` in `tests/AppointmentScheduler.Tests/Api/` | TestServer, DI replacements and temporary SQLite lifecycle |
 
 Local commands recorded by the README, from the repository root:
 
@@ -726,6 +739,11 @@ Local commands recorded by the README, from the repository root:
 dotnet restore AppointmentScheduler.slnx
 dotnet build AppointmentScheduler.slnx --no-restore
 dotnet test AppointmentScheduler.slnx --no-build --no-restore
+$databasePath = Join-Path $env:TEMP ("doctorly-" + [guid]::NewGuid().ToString("N") + ".db")
+$env:ConnectionStrings__SchedulerDatabase = "Data Source=$databasePath;Pooling=False"
+dotnet tool restore
+dotnet ef database update --project src/AppointmentScheduler.Infrastructure --no-build
+dotnet ef migrations has-pending-model-changes --project src/AppointmentScheduler.Infrastructure --no-build
 dotnet run --project src/AppointmentScheduler.Api/AppointmentScheduler.Api.csproj --no-build --launch-profile http
 ```
 
@@ -733,7 +751,7 @@ Use `--no-build` after a successful build of the intended current source. Startu
 
 ## 16. Sources and references
 
-Alongside the documents inventoried in section 1, source inspection covered the host/project file, controller/contracts/exception handler, five handlers, both ports, aggregate, EF context/repository, infrastructure DI/logger and selected HTTP/concurrency tests. Corrections to earlier explanations are incorporated in the relevant sections.
+Alongside the documents inventoried in section 1, source inspection covered the host/project file, controller/contracts/exception handler, six handlers, both ports, aggregate, EF mapping/context/repository, initializer/migrations, infrastructure DI/logger and HTTP/relational tests. Corrections to earlier explanations are incorporated in the relevant sections.
 
 Primary framework references:
 
@@ -754,12 +772,12 @@ These exercises use the inspected code and assessment requirements. Section 22 i
 | Question to answer independently | Answer for this project | Source anchor |
 | --- | --- | --- |
 | Why is the API project an HTTP host and the others libraries? | Web SDK and `Program.cs` compose/run ASP.NET Core; the libraries supply behaviour without listening independently. | Sections 2–3; API csproj, `Program.cs` |
-| How does a controller obtain handlers? | DI resolves constructor dependencies recursively. Registrations choose implementations; lifetimes control reuse. | Section 3; constructor, Infrastructure `DependencyInjection.cs` |
+| How does a controller obtain handlers? | DI resolves constructor dependencies recursively. Registrations choose implementations; lifetimes control reuse. | Section 3; constructor, Infrastructure `InfrastructureServiceCollectionExtensions.cs` |
 | Why not make the handler/repository singleton? | They depend on a request-scoped, mutable, non-thread-safe context. Longer-lived capture breaks the intended lifetime boundary. | Section 3; registrations and `SchedulerDbContext` |
 | How can Application call EF persistence without referencing Infrastructure? | It calls `IEventRepository`; the host injects `EfEventRepository`. Runtime calls differ from project references. | Section 2; interface and implementation |
 | What separates middleware, controller, handler and aggregate? | Shared HTTP behaviour; transport mapping; use-case coordination; business rules, respectively. | Sections 3 and 6; request chain |
 | Why validate in API and Domain? | API checks the input contract; Domain protects business rules outside HTTP too. Their current checks are not identical. | Section 4; contracts, null checks, `ValidateDetails` |
-| Does changing a tracked object immediately change SQLite? | No: saving persists changes. `DbSet.AddAsync` only tracks; this repository's `AddAsync` also saves. | Sections 6–7; repository, context |
+| Does changing a tracked object immediately change SQLite? | No: saving persists changes. `DbSet.AddAsync` only tracks; this repository's `AddAndSaveAsync` also saves. | Sections 6–7; repository, context |
 | What does the aggregate boundary buy and cost? | Centralized event/attendee rules, with coarse conflicts from the shared event version. | Sections 4 and 8; `CalendarEvent`, mapping |
 | Does awaiting publication imply background or durable delivery? | No: this adapter logs and returns a completed task. Durability needs storage/dispatch mechanisms. | Sections 9–10; publisher |
 | Does cancelling the HTTP request reverse a save? | No. Tokens request cooperative cancellation; a committed database change remains committed. Identify the exact stage reached. | Sections 9–10; save and publication order |
@@ -776,8 +794,8 @@ These exercises use the inspected code and assessment requirements. Section 22 i
 | --- | --- | --- |
 | Four project boundaries | Express the brief's layering/DDD through separated responsibilities and dependencies. | Folders reduce ceremony when separate projects add little isolation. |
 | Narrow repository | Application-oriented persistence operations and substitution. | Direct EF simplifies a small app but couples orchestration to EF/provider details. An interface must justify its boundary. |
-| SQLite with `EnsureCreated` | Runnable relational storage without server setup; upgrades deferred. | Shared deployment and schema evolution can justify server DB/migrations; neither was mandatory. |
-| Full-replacement update | Straightforward validation and mutation. | Preserve IDs when clients retain attendee references; recreation is not a DDD requirement. |
+| SQLite with guarded migrations | Runnable relational storage and managed schema evolution; legacy adoption refused. | Shared deployment can justify a server DB; production deployment/legacy transition still need review. |
+| Full-replacement update | Complete validation with supplied-ID retention and explicit additions/removals. | Separate membership operations/invitation lifecycle if required; recreation is not a DDD requirement. |
 | Save before notification | Avoids announcing a failed save. | Outbox for durable intent; direct delivery retains a post-save failure gap. |
 | Shared event version | Prevents stale overwrites. | Independent responses may justify finer concurrency or controlled merge, subject to consistency rules. |
 
@@ -795,26 +813,26 @@ These exercises use the inspected code and assessment requirements. Section 22 i
 | --- | --- | --- |
 | PUT supplies an old version | 409 before aggregate mutation; no save/publication. | Handler comparison; stale-version HTTP test in section 12 |
 | Another writer commits after this request loads the event | EF version check fails; repository maps conflict, normally 409. No publication. | Section 8; two-context save test, not simultaneous HTTP load |
-| Identical PUT with current version | Recreated attendee IDs, incremented version, save and Updated publication. | `CalendarEvent.Update`; verify IDs/version/message |
+| Identical PUT with current version | Supplied IDs retained (omitted IDs add); incremented version, save and Updated publication. | `CalendarEvent.Update`; verify IDs/version/message |
 | Different attendees accept using the same event version | Shared version can cause 204/409 despite independent changes; SQLite contention can cause other errors. | Section 8; actual request outcomes need a contention test |
 | Publisher fails after successful POST save | Client gets 500 but the event remains stored. Repeating the POST can create a duplicate. | Failure test in section 12; no POST idempotency mechanism |
 | Attendance answer is unchanged | Current version: 204, no save/publication. Stale version: 409; version check precedes no-op detection. | `SetAttendanceHandler.HandleAsync`, aggregate |
-| Start omitted, end valid | Default start may pass validation; unexecuted static risk. | Section 4; test omission separately from malformed/null input |
+| Start omitted, end valid | 400 from required JSON presence; storage unchanged and no publication. | Section 4; RequiredTimestampTests test omission/null/malformed values separately |
 | Query touches an event boundary | Inclusive overlap can match; no mutation/publication. | Section 7; predicates |
 
 **Deliverable:** predict before execution; record observations and explain mismatches. Prioritize consequential cases.
 
 ## 20. Exercise: change impact
 
-Proposed exercises; the code is unchanged.
+Exercises A and B now describe implemented improvements: explain/predict/verify them against source and tests. Exercise C remains a proposed extension.
 
 ### A. Preserve attendee identity during event updates
 
 **Questions:** How is an existing attendee identified? What distinguishes additions, edits and removals? Should attendance survive an update? What happens to an ID belonging to another event?
 
-**Answer:** accept optional existing IDs, validate membership/duplicates, update matching children and generate IDs for additions. Specify removal and attendance-preservation rules. Validate before mutation; retain version checks.
+**Implemented answer:** optional supplied IDs retain members; missing IDs add; omitted members remove. Membership/duplicate-ID/email checks precede mutation. Omitted/null attendance preserves retained values and defaults false for additions; explicit values replace it. Version checks remain.
 
-**Impact:** update matching contract files under `src/AppointmentScheduler.Api/Events/Update/`, controller/command mapping, `UpdateEventHandler.cs` and `CalendarEvent.cs`. Responses already expose IDs; verify EF child reconciliation.
+**Impact:** update matching contract files under API `Requests/` and `Responses/`, controller files under `Controllers/`, controller/command mapping, `UpdateEventHandler.cs` and `CalendarEvent.cs`. Responses already expose IDs; verify EF child reconciliation.
 
 **Verify:** retained/new IDs, rejected foreign/duplicate IDs, removal/attendance semantics, invalid-input non-mutation and stale conflicts. Test child persistence relationally.
 
@@ -822,9 +840,9 @@ Proposed exercises; the code is unchanged.
 
 **Questions:** What does GET by ID return for missing or cancelled events? Can the existing repository lookup be reused safely? How will a client follow the creation response?
 
-**Answer:** add a read handler/result and GET route; define cancelled/missing-event behaviour. Existing tracked `GetByIdAsync` can support the read; consider no-tracking support. Map the representation and use `CreatedAtAction` for POST.
+**Implemented answer:** GetEventHandler/result and GET return cancelled events (200), missing IDs (404) and current details/attendees/version. Tracked GetByIdAsync is reused without mutation/save. POST uses CreatedAtRoute with the named GET route; following Location is tested.
 
-**Impact:** Application, controller/contracts, DI and possibly repository. **Verify:** 200/404, representation/version and a resolvable creation Location.
+**Implemented locations:** Application Get handler/contracts, API Get controller/contracts and DI. The existing repository lookup is reused. **Verify:** 200/404, representation/version and a resolvable creation Location.
 
 ### C. Protect events by practice and caller permission
 
@@ -891,14 +909,14 @@ After studying this submission, use a different domain/rules to test transfer, a
 | **1. State and guarantees:** review 13:21–21:48 | What survives each failure, and what happens on retry? | POST can save, fail publication and return 500. Repeating POST can duplicate the event; update versioning does not prevent this. Predict stored rows, response and messages separately. Sections 8–9, 19. |
 | **2. Preserve the scenario:** review 21:52–24:52 | What is shared, what changes independently, and which invariant is protected? | Two attendees change separate answers but share one event version. A stale request conflicts; this is not competition for an exclusive slot. Compare both loaded-before-save and loaded-after-save cases. Section 8. |
 | **3. Runtime mechanics:** practice T2–T3; review 29:09–31:09 | Can I distinguish dependency direction, object lifetime, asynchronous waiting and cancellation? | Draw project references separately from runtime calls; identify scoped context ownership; trace the token past save. No automatic background work or rollback follows from `await` or cancellation. Sections 2–3, 10, 17. |
-| **4. Behavioural proof:** practice T6; earlier Beqom closure findings | What assertion would disprove my claim? Which sibling paths also need it? | The invalid-time HTTP test asserts 400 but not unchanged storage. Add a database assertion to prove its name. For conflict guarantees, check state and non-publication as well as 409; use real EF/SQLite for persistence behaviour. Sections 12, 19. |
+| **4. Behavioural proof:** practice T6; earlier Beqom closure findings | What assertion would disprove my claim? Which sibling paths also need it? | The original invalid-time test asserts only 400; new RequiredTimestampTests/InvalidEventWriteTests separately prove unchanged storage/no publication across rejected writes. Keep response, state and side effects as separate assertions. For conflict guarantees, check state and non-publication as well as 409; use real EF/SQLite for persistence behaviour. Sections 12, 19. |
 | **5. Ownership and scope:** review 07:37–10:55; earlier assisted-project findings | Can I explain and revise this choice, and identify what remains unverified? | Complete one change from section 20, stating affected contracts, rules, persistence and tests before editing. Explain what four projects buy relative to folders; distinguish the brief's requirements from later production extensions. Sections 13, 18, 20. |
 
 ### Check the whole behaviour without widening the assignment
 
 Earlier records repeatedly found one correct path with missed sibling paths. For each rule, make a small **operation × state** checklist: create, update, attendance and cancellation against valid, invalid, stale and unchanged input. Mark genuinely inapplicable cases. Record response, stored state and publication; do not assume all operations should behave identically.
 
-**Worked contrast:** unchanged attendance with the current version returns 204 without save/publication; identical full PUT recreates attendee IDs, increments the version and publishes. A shared “updates are harmless when unchanged” explanation would be wrong (sections 4, 19).
+**Worked contrast:** unchanged attendance with the current version returns 204 without save/publication; identical full PUT retains supplied IDs but increments the version and publishes; omitted IDs add new identities. A shared “updates are harmless when unchanged” explanation would be wrong (sections 4, 19).
 
 ### Distinguish a repair from an explanation
 

@@ -2,23 +2,28 @@
 
 This guide explains where the current behavior lives and how to change it. For initial setup, HTTP examples, Swagger URLs, and troubleshooting, start with [`README.md`](README.md).
 
+## Structure rule
+
+Group by artifact within each project, keeping folder namespaces and matching type files. The four projects retain responsibility/dependency boundaries. Operation names connect files across artifact directories; no use-case or Events container is required for current navigation.
+
 ## Starting points
 
-- `AppointmentScheduler.slnx`: all production and test projects.
-- `src/AppointmentScheduler.Api/Program.cs`: application entry point, DI composition, middleware order, OpenAPI, and database creation.
-- `src/AppointmentScheduler.Api/Controllers/EventsController.cs`: all public event routes and transport/application mapping.
-- `src/AppointmentScheduler.Api/Events/`: request/response contracts and data-annotation validation.
-- `src/AppointmentScheduler.Api/ErrorHandling/ApiExceptionHandler.cs`: centralized exception-to-Problem-Details mapping.
-- `src/AppointmentScheduler.Domain/Events/CalendarEvent.cs`: aggregate rules and state transitions.
-- `src/AppointmentScheduler.Application/Events/*`: use-case handlers, commands/results, and application ports.
-- `src/AppointmentScheduler.Infrastructure/DependencyInjection.cs`: infrastructure registrations.
-- `src/AppointmentScheduler.Infrastructure/Persistence/*`: EF model and repository.
+- API Program.cs: host, DI, middleware, initialization.
+- API Controllers/: HTTP routes and response mapping; Requests/ and Responses/: transport contracts.
+- API ErrorHandling/ and OpenApi/: errors and executable metadata.
+- Application Handlers/: use-case orchestration; Commands/, Queries/, Inputs/, Results/: boundary messages.
+- Application Interfaces/: persistence/notification ports; Exceptions/: application errors; Notifications/: notification payload/enum.
+- Domain Entities/: CalendarEvent and Attendee; Inputs/: attendee operation payloads; Exceptions/ and Validation/: domain rules/errors.
+- Infrastructure Repositories/: EfEventRepository; Configurations/: CalendarEventConfiguration; DbContexts/: context/design factory.
+- Infrastructure DatabaseInitialization/: guarded initializer; Migrations/: initial migration/model snapshot; NotificationPublishers/: logging adapter.
+- Tests retain Api/Application/Domain/Infrastructure boundaries, grouping by tested artifact. API Fixtures/ contains AppointmentSchedulerApiFactory and EventApiTestSession.
 
 Public HTTP operations:
 
 | Method and route | Application entry point |
 | --- | --- |
 | `POST /api/events` | `CreateEventHandler.HandleAsync` |
+| `GET /api/events/{id}` | `GetEventHandler.HandleAsync` |
 | `GET /api/events` | `ListEventsHandler.HandleAsync` |
 | `PUT /api/events/{id}` | `UpdateEventHandler.HandleAsync` |
 | `DELETE /api/events/{id}` | `CancelEventHandler.HandleAsync` |
@@ -33,24 +38,30 @@ There are no scheduled processes, background workers, domain-event dispatcher, a
 Follow this path:
 
 1. `CreateEventRequest` defines HTTP validation.
-2. `EventsController.Create` rejects null attendee entries and maps to `CreateEventCommand`.
+2. `CreateEventController.CreateAsync` rejects null attendee entries and maps to `CreateEventCommand`.
 3. `CreateEventHandler.HandleAsync` calls `CalendarEvent.Create`.
 4. `CalendarEvent.ValidateDetails` and `Attendee.Create` enforce invariant rules and normalize UTC/text.
-5. `IEventRepository.AddAsync` is implemented by `EfEventRepository`, which saves the full aggregate.
+5. `IEventRepository.AddAndSaveAsync` is implemented by `EfEventRepository`, which saves the full aggregate.
 6. `IEventNotificationPublisher.PublishAsync` runs only after the save.
-7. The controller maps `CreateEventResult` to a 201 response.
+7. The controller maps `CreateEventResult` to a 201 response with `CreatedAtRoute`/Location pointing at `GetEventController.RouteName`.
 
 Start with `CreateEventEndpointTests` for the HTTP path, `CreateEventHandlerTests` for SQLite persistence, and `CalendarEventTests` for invariant examples.
 
+### Retrieve by ID
+
+`GetEventController.GetAsync` calls `GetEventHandler` with `GetEventQuery`. It returns details, attendees, cancellation state and version; cancelled events remain retrievable, missing IDs return 404. The existing tracked lookup is reused without save/mutation/publication. `GetEventEndpointTests` verifies retrieval and following Location.
+
 ### List, filter, and search
 
-`EventsController.List` passes raw query values to `ListEventsHandler`. The handler normalizes dates/search and rejects an inverted range. `EfEventRepository.ListAsync` builds one no-tracking query, applies active/date/search filters, and orders by UTC start then ID. `ListEventsEndpointTests` demonstrates overlap and search semantics.
+`ListEventsController.ListAsync` passes raw query values to `ListEventsHandler`. The handler normalizes dates/search and rejects an inverted range. `EfEventRepository.ListAsync` builds one no-tracking query, applies active/date/search filters, and orders by UTC start then ID. `ListEventsEndpointTests` demonstrates overlap and search semantics.
 
-To change filter meaning, update all three relevant points: `ListEventsQuery`/handler normalization, `EventQuery`/repository translation, and endpoint tests. Search currently treats SQLite `LIKE` wildcard characters as wildcards.
+To change filter meaning, update all three relevant points: `ListEventsQuery`/handler normalization, `EventRepositoryQuery`/repository translation, and endpoint tests. Search currently treats SQLite `LIKE` wildcard characters as wildcards.
 
 ### Update
 
-`EventsController.Update` maps a full replacement request. `UpdateEventHandler` loads the aggregate, returns 404 through `EventNotFoundException` when absent, checks the supplied version, then calls `CalendarEvent.Update`. Update validates the full replacement, creates a new attendee collection with new attendee IDs, increments the version, saves, publishes `Updated`, and returns the new state.
+`UpdateEventController.UpdateAsync` maps a full replacement request. `UpdateEventHandler` loads the aggregate, returns 404 through `EventNotFoundException` when absent, checks the supplied version, then calls `CalendarEvent.Update`. Update validates the full replacement, retains supplied existing IDs/instances, creates ID-less additions and removes omitted children, increments the version, saves, publishes `Updated`, and returns the new state.
+
+Omitted/null attendance preserves retained answers and defaults false for additions; explicit values replace attendance. Duplicate/foreign IDs and duplicate emails reject the entire request before mutation. Every valid PUT increments version even for identical values.
 
 Both the application version comparison and EF concurrency token are required: the first identifies an already-stale client; the second detects a race after loading.
 
@@ -70,10 +81,11 @@ ASP.NET Core model validation handles binding, malformed JSON, required values, 
 
 | Rule | Enforcement |
 | --- | --- |
-| Required/limited event and attendee text | API data annotations and Domain `RequiredText` |
+| Required/limited event and attendee text | API data annotations and Domain `RequiredTextValidator.ValidateAndNormalize` |
 | Valid attendee email | API `EmailAddress` plus Domain `MailAddress.TryCreate` |
 | At least one non-null attendee | API `Required`/`MinLength`, controller null-entry check, Domain count/null check |
 | Unique attendee emails per event | Domain case-insensitive grouping; database unique composite index provides an additional provider-collation constraint |
+| Timestamp presence on POST/PUT | API `[property: JsonRequired]`; missing/null/malformed values return 400 |
 | End later than start | Domain |
 | UTC normalization | Domain for writes; list handler for filters; EF UTC-ticks converter |
 | Cancelled event cannot update/alter attendance | Domain |
@@ -87,13 +99,13 @@ No rule prevents overlapping appointments or checks attendee availability.
 
 ## Persistence details
 
-`SchedulerDbContext.OnModelCreating` is the authoritative model definition. Event lookup is tracked and includes attendees because mutation follows. Listing is no-tracking. The owned attendee collection is persisted in a separate `Attendees` table and follows the event lifecycle.
+`CalendarEventConfiguration` is the authoritative model definition, applied by `SchedulerDbContext.OnModelCreating`. Event lookup is tracked and includes attendees for mutations and GET by ID; reads never save. Listing is no-tracking. The owned attendee collection is persisted in a separate `Attendees` table and follows the event lifecycle.
 
-Writes use one scoped context and one EF `SaveChanges` call; EF supplies its normal transaction for multi-row changes. Notification publication occurs after that database transaction and is not atomic with it.
+Writes use one scoped context. Normal writes use an EF save transaction. Retained email changes stage temporary unique emails then final values in two saves within one explicit transaction, permitting email swaps and rolling back both phases on failure. Notification publication occurs after that database transaction and is not atomic with it.
 
-The version column participates in EF update predicates. `DbUpdateConcurrencyException` becomes a 409-facing application exception. Update replaces all attendees rather than matching existing attendees, so attendee IDs change on every update.
+The version column participates in EF update predicates. `DbUpdateConcurrencyException` becomes a 409-facing application exception. Update matches only supplied IDs, retaining tracked objects/identity; it does not infer identity from email.
 
-Startup calls `EnsureCreatedAsync`. There are no migrations or seed records. The default SQLite file persists across runs but must be replaced when the model changes. Backward-compatible schema upgrades are explicitly outside the current scope.
+Startup calls `SchedulerDatabaseInitializer.InitializeAsync`: fresh/managed databases receive migrations, tables without recorded migrations are refused. The initial migration/model snapshot exist; no seed records or automatic legacy transition exists. Preserve the working legacy database and use a separate fresh path. `SchedulerDbContextDesignFactory` requires an explicit connection variable for CLI operations.
 
 ## Security and failure behaviour
 
@@ -105,16 +117,7 @@ Expected HTTP failures are documented in [`README.md`](README.md#error-responses
 
 Required prerequisite: .NET 10 SDK (verified with 10.0.401). The default connection is `ConnectionStrings:SchedulerDatabase` in `appsettings.json`; override it with `ConnectionStrings__SchedulerDatabase`. No secrets are required.
 
-From the repository root:
-
-```powershell
-dotnet restore AppointmentScheduler.slnx
-dotnet build AppointmentScheduler.slnx --no-restore
-dotnet test AppointmentScheduler.slnx --no-build --no-restore
-dotnet run --project src/AppointmentScheduler.Api/AppointmentScheduler.Api.csproj --no-build --launch-profile http
-```
-
-Development listens at `http://localhost:5158`; Swagger is `/swagger/index.html` and OpenAPI JSON is `/openapi/v1.json`. See the README for request examples and database reset instructions.
+Use the [README setup and migration commands](README.md#build-test-and-run), including its explicit separate database path. Development listens at `http://localhost:5158`; Swagger is `/swagger/index.html` and OpenAPI JSON is `/openapi/v1.json`.
 
 ## Extension and debugging map
 
@@ -122,13 +125,19 @@ Development listens at `http://localhost:5158`; Swagger is `/swagger/index.html`
 | --- | --- | --- |
 | Add/change an event invariant | `CalendarEvent.cs` | Domain tests, then affected API lifecycle tests |
 | Add an operation | new Application handler, controller action/contract, repository method if needed | focused application test plus API test |
-| Change filters/search/order | `ListEventsHandler`, `EventQuery`, `EfEventRepository.ListAsync` | `ListEventsEndpointTests` against SQLite |
-| Change EF shape/index/conversion | `SchedulerDbContext.OnModelCreating` | infrastructure/API tests using SQLite; add migrations if productionizing |
+| Change filters/search/order | `ListEventsHandler`, `EventRepositoryQuery`, `EfEventRepository.ListAsync` | `ListEventsEndpointTests` against SQLite |
+| Change EF shape/index/conversion | `SchedulerDbContext.OnModelCreating` | infrastructure/API tests using SQLite; generate/review a migration, build it and test fresh/upgrade copies |
 | Add a notification channel | implement `IEventNotificationPublisher`, register in Infrastructure | application ordering/content tests and adapter integration tests |
 | Change error mapping | `ApiExceptionHandler` | `ErrorHandlingTests` in Development and Production modes |
 | Diagnose 400 | response `errors`, request contract annotations, controller null-entry checks, Domain validation |
-| Diagnose 409 | request version, `UpdateEventHandler`/`SetAttendanceHandler`, EF logs, `EventConcurrencyTests` |
+| Diagnose 409 | request version, `UpdateEventHandler`/`SetAttendanceHandler`, EF logs, `EfEventRepositoryConcurrencyTests` |
 | Diagnose 500 | response trace ID and server log; repository/publisher/configuration are common boundaries |
-| Diagnose schema mismatch | configured SQLite path and `EnsureCreated` limitation; use a fresh database |
+| Diagnose schema mismatch | configured path/history and initializer refusal; preserve legacy data and select a separate database |
 
 Keep HTTP concerns in the API, orchestration in Application, invariants in Domain, and external/provider code in Infrastructure. Add an interface only at a boundary that needs substitution; the current design intentionally avoids generic repositories, mediator infrastructure, and speculative services.
+
+## Recent focused tests and contract metadata
+
+Timestamp presence/non-mutation: `RequiredTimestampTests`, `InvalidEventWriteTests`. Retrieval/Location: `GetEventEndpointTests`. Stable identity/attendance: `UpdateAttendeeIdentityTests`, `AttendeeReplacementTests`. Relational swap/failure rollback: `EfEventRepositoryReconciliationTests`. Migration/history guard: `SchedulerDatabaseInitializerTests`. API metadata: `EventOpenApiTests`.
+
+Changed contracts have executable metadata in `EventOpenApiOperationTransformer` and `UpdateEventSchemaTransformer`; keep these aligned with future route/contract edits. Shared version contention, notification durability and duplicate POST retries remain unresolved. Full verification: 123 passing tests on 8 October 2026.

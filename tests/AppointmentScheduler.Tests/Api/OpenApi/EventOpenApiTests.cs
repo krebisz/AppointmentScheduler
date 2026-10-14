@@ -1,5 +1,6 @@
+using AppointmentScheduler.Api.Requests;
+using AppointmentScheduler.Tests.Api.Fixtures;
 using System.Text.Json.Nodes;
-using AppointmentScheduler.Tests.Api.Events;
 using Xunit;
 
 namespace AppointmentScheduler.Tests.Api.OpenApi;

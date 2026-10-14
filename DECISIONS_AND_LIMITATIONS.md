@@ -1,6 +1,12 @@
 # Decisions and limitations
 
-This document records why the current implementation has its shape and where its guarantees stop. **Observed** means directly supported by code/configuration/tests. **Recorded rationale** comes from `WORKLOG.md`. **Inferred rationale** is labelled explicitly. Future work is labelled **Recommended**.
+Checked against current source and 123 passing tests on 9 October 2026. This document records why the current implementation has its shape and where its guarantees stop. **Observed** means directly supported by code/configuration/tests. **Recorded rationale** comes from `WORKLOG.md`. **Inferred rationale** is labelled explicitly. Future work is labelled **Recommended**.
+
+## Structure refinement
+
+Artifact grouping implements the user's scanning preference: API Controllers/Requests/Responses and Application Handlers/Commands/Queries/Inputs/Results/Interfaces make structural composition visible. Domain distinguishes Entities, operation Inputs, Exceptions and Validation. Infrastructure distinguishes contexts, mappings, repositories, initialization, migrations and notification publishers. Tests mirror tested artifacts; shared API fixtures are separate.
+
+This changes navigation/namespaces, not architectural responsibilities. Four projects, distinct boundary messages and narrow ports remain useful. The associated notification enum stays with its message rather than introducing a generic Enums bucket. Operation names still connect a call chain. C# consumers must update imports; HTTP contracts and database schema are unchanged.
 
 ## Material decisions
 
@@ -19,21 +25,29 @@ This document records why the current implementation has its shape and where its
 - **Evidence:** private constructors/mutators, EF `OwnsMany`, and all changes through aggregate methods.
 - **Recorded rationale:** event and attendee invariants form one consistency boundary.
 - **Benefit:** creation/update validates the complete event atomically.
-- **Cost:** PUT replaces all attendees and their IDs; independent attendee lifecycle/history is unavailable.
-- **Alternative:** separate attendee/invitation aggregates with stable identity and explicit membership operations.
+- **Cost:** PUT replaces membership, retaining supplied existing IDs; ID-less inputs still create new identities; independent attendee lifecycle/history is unavailable.
+- **Alternative:** separate invitation aggregates with independent lifecycle/versioning, if required.
 
-### SQLite with `EnsureCreated`
+### SQLite with guarded EF migrations
 
-- **Decision:** use EF Core SQLite and create a fresh schema at startup without migrations.
-- **Evidence:** `UseSqlite`, `EnsureCreatedAsync`, no migration files.
-- **Recorded rationale:** reproducible relational persistence without an external server within assessment scope.
-- **Benefit:** one-command local startup and relational behavior in tests.
-- **Cost:** no schema upgrade path; SQLite and a local file are unsuitable for many multi-instance/operational requirements.
-- **Alternative:** versioned EF migrations and a managed relational database.
+- **Decision:** use EF Core SQLite, an initial migration/model snapshot and guarded `MigrateAsync` initialization.
+- **Evidence:** `SchedulerDatabaseInitializer`, `SchedulerDbContextDesignFactory`, migration files and initialization tests.
+- **Benefit:** reproducible fresh creation and versioned managed upgrades without an external database server.
+- **Cost:** startup applies pending migrations; deployment/backup policy remains future work. Legacy tables without history are deliberately refused, not automatically adopted or reset.
+- **Compatibility:** the existing working database is preserved and legacy. Select an explicit separate fresh/managed database; CLI requires the connection variable. A reviewed transition on disposable copies is still needed for legacy data.
+- **Alternative:** controlled deployment migration execution and a managed relational database for operational requirements.
+
+### Explicit timestamps, resource discovery and attendee identity
+
+POST/PUT use JSON-required non-nullable timestamps to reject omission without changing UTC/range semantics. GET by ID exposes details/attendees/cancellation/version and POST Location resolves through its named route. Reads never save or publish.
+
+PUT supplied IDs retain existing children; missing/null IDs add, omitted members remove. Omitted/null attendance preserves retained values and defaults false for additions. Entire replacements validate before mutation. Email edits stage temporary/final values in one transaction so swaps do not violate SQLite's immediate unique index. Relational tests cover success and rollback.
+
+These changes do not make notification publication durable, POST retries idempotent or independent replies free of shared-version conflicts.
 
 ### Soft cancellation
 
-- **Decision:** DELETE sets `IsCancelled`; cancelled rows remain queryable with `includeCancelled=true`.
+- **Decision:** DELETE sets `IsCancelled`; cancelled rows remain queryable with `includeCancelled=true` or GET by ID.
 - **Evidence:** `CalendarEvent.Cancel`, repository default filter, lifecycle tests.
 - **Recorded rationale:** preserve data and make repeated cancellation idempotent.
 - **Benefit:** history is retained and repeated DELETE is harmless.
@@ -61,10 +75,10 @@ This document records why the current implementation has its shape and where its
 ### Numeric optimistic concurrency
 
 - **Decision:** expose an event version for update/attendance, check it in Application, and configure it as an EF concurrency token.
-- **Evidence:** response/request contracts, handlers, `SchedulerDbContext`, and concurrency tests.
+- **Evidence:** response/request contracts, handlers, `CalendarEventConfiguration`, and concurrency tests.
 - **Recorded rationale:** demonstrate same-event conflict detection with a small implementation.
 - **Benefit:** stale clients and save-time races receive 409 rather than silently overwriting data.
-- **Cost:** no merge/retry/history; DELETE has no client precondition; numeric versions are an API concern rather than HTTP ETags.
+- **Cost:** independent attendee replies share the same event version; no merge/retry/history; DELETE has no client precondition; numeric versions are an API concern rather than HTTP ETags.
 - **Alternative:** `ETag`/`If-Match`, provider row-version columns, or domain-specific merge rules.
 
 ### Centralized Problem Details
@@ -82,18 +96,18 @@ This document records why the current implementation has its shape and where its
 - Notifications are synchronous in the request and simulated through logs.
 - Swagger UI is Development-only; OpenAPI JSON is available, but generated client source/package and public hosting are deferred.
 - Attendance is one boolean on an owned attendee, not an invitation workflow.
-- Update uses complete replacement rather than partial patches or identity-preserving attendee reconciliation.
+- Update uses complete membership replacement with explicit ID-based reconciliation; identical valid PUT still increments version/saves/publishes.
 - Listing has no pagination, availability calculation, recurrence, practice/doctor/resource model, or overlap prevention.
-- Backward-compatible schema upgrades were explicitly excluded; local databases are recreated after model changes.
+- Automatic legacy schema adoption is not implemented; retained databases are not deleted/reset. Fresh and migration-managed databases use migrations.
 
-At greater scale, these choices require versioned migrations, a server database, pagination/index review, asynchronous reliable notification delivery, authentication/authorization, and operational tooling before optional architectural sophistication.
+At greater scale, these choices require controlled migration deployment/legacy adoption, a suitable server database, pagination/index review, asynchronous reliable notification delivery, authentication/authorization, and operational tooling before optional architectural sophistication.
 
 ## Known limitations and risks
 
 ### Correctness and data integrity
 
 - A notification failure returns 500 after the database commit. Retrying POST can create a duplicate because no idempotency key or outbox exists.
-- Update recreates attendees with new IDs, so external references to attendee IDs are invalidated.
+- ID-less update inputs create new attendee identities even if emails match. Clients must supply IDs to retain references.
 - Domain email uniqueness is case-insensitive, while the SQLite unique index uses provider collation; the Domain is the stronger guarantee for normal writes.
 - Search text is inserted into a `LIKE` pattern without escaping `%` or `_`; callers can unintentionally broaden matching.
 - Cancel relies on save-time EF concurrency but accepts no client version, so it cannot reject an already-stale cancellation intent before loading.
@@ -108,7 +122,7 @@ At greater scale, these choices require versioned migrations, a server database,
 
 ### Operations and performance
 
-- No migrations, backup/restore workflow, health checks, metrics, alerting, distributed tracing, CI workflow, container, or deployment manifest is present.
+- An initial migration exists, but no production backup/restore workflow, health checks, metrics, alerting, distributed tracing, CI workflow, container, or deployment manifest is present.
 - A SQLite file constrains multi-instance operation and write concurrency.
 - List queries are unpaginated and `%term%` search cannot efficiently use a normal index at scale.
 - Notification logs prove invocation, not delivery.
@@ -116,14 +130,14 @@ At greater scale, these choices require versioned migrations, a server database,
 
 ### Verification boundaries
 
-Tests cover domain rules, SQLite mappings/queries/concurrency, HTTP behavior, and injected failures. They do not cover external notification providers, authentication, migrations, deployed networking/TLS, browser integration, backup recovery, load, or multi-process contention. Those capabilities are absent rather than merely untested.
+Tests cover domain rules, SQLite mappings/queries/concurrency, HTTP behavior, and injected failures. They do not cover external notification providers, authentication, successful legacy adoption/later-version upgrades, simultaneous HTTP contention, deployed networking/TLS, browser integration, backup recovery, load, or multi-process contention. Some capabilities are absent; others require operational/load verification beyond the current suite.
 
 ## Production-readiness path
 
 **Recommended, necessary before handling real practice/patient data:**
 
 1. Define identity, roles, ownership, authorization, privacy, retention, and audit requirements; implement and security-test them.
-2. Introduce versioned migrations, a supported production database, backup/restore, and deployment rollback procedures.
+2. Review/deploy migrations deliberately, define a legacy-data transition if needed, and establish a supported production database, backup/restore and rollback procedures.
 3. Make write requests idempotent and notification delivery reliable, normally with a transactional outbox, delivery records, retries, and monitoring.
 4. Define concurrency semantics for every mutation, including cancellation; consider ETags and explicit client conflict handling.
 5. Add production configuration/secrets management, HTTPS hosting, health/readiness checks, structured telemetry, alerting, and CI/CD verification.
@@ -139,5 +153,5 @@ Tests cover domain rules, SQLite mappings/queries/concurrency, HTTP behavior, an
 - What notification channels and delivery guarantees are required, and what should the API report after partial delivery failure?
 - Which time zone should be shown to users, and must the original scheduling zone survive daylight-saving changes?
 - What retention, audit, deletion, export, encryption, and consent rules apply to attendee data?
-- Should update preserve attendee IDs and reconcile individuals, or is complete replacement the intended contract?
+- Should independent attendee replies retain shared event-version conflicts or use a finer concurrency policy? Stable attendee IDs on full replacement are now implemented.
 - Which consumers require a generated client, and how should it be versioned and distributed?
