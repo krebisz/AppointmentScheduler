@@ -21,6 +21,8 @@ builder.Services.AddScoped<GetEventHandler>();
 builder.Services.AddScoped<UpdateEventHandler>();
 builder.Services.AddScoped<CancelEventHandler>();
 builder.Services.AddScoped<SetAttendanceHandler>();
+builder.Services.AddScoped<CreatePractitionerHandler>();
+
 builder.Services.AddInfrastructure(
     builder.Configuration.GetConnectionString("SchedulerDatabase")
     ?? "Data Source=appointment-scheduler.db");

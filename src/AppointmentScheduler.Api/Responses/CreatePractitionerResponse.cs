@@ -1,0 +1,3 @@
+
+namespace AppointmentScheduler.Api.Responses;
+

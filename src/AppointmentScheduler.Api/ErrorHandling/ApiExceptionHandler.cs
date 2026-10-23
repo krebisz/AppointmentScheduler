@@ -14,8 +14,8 @@ public sealed class ApiExceptionHandler(ILogger<ApiExceptionHandler> logger) : I
         switch (exception)
         {
             case DomainValidationException:
-            case InvalidEventQueryException:
-                var key = exception is InvalidEventQueryException ? "dateRange" : "event";
+            case InvalidQueryException:
+                var key = exception is InvalidQueryException ? "dateRange" : "event";
                 response = Results.ValidationProblem(
                     new Dictionary<string, string[]> { [key] = [exception.Message] },
                     extensions: extensions);
@@ -28,6 +28,18 @@ public sealed class ApiExceptionHandler(ILogger<ApiExceptionHandler> logger) : I
                 response = Results.Problem(statusCode: 409, title: "Event update conflict",
                     detail: exception.Message, extensions: extensions);
                 break;
+            case PractitionerNotFoundException:
+                response = Results.Problem(statusCode: 404, title: "Practitioner not found",
+                    detail: exception.Message, extensions: extensions);
+                break;
+            case PractitionerInactiveException: //Method Not Allowed
+                response = Results.Problem(statusCode: 405, title: "Practitioner is deactivated",
+                    detail: exception.Message, extensions: extensions);
+                break; 
+            case PractitionerConcurrencyException: //Conflict
+                response = Results.Problem(statusCode: 409, title: "Practitioner timeslot unavailable",
+                    detail: exception.Message, extensions: extensions);
+                break;            
             default:
                 logger.LogError(exception, "Unhandled API error. TraceId: {TraceId}", context.TraceIdentifier);
                 response = Results.Problem(statusCode: 500, title: "An unexpected error occurred.",

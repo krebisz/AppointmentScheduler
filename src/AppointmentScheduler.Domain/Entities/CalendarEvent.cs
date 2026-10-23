@@ -13,6 +13,7 @@ public sealed class CalendarEvent
 
     private CalendarEvent()
     {
+
     }
 
     private CalendarEvent(
@@ -21,7 +22,8 @@ public sealed class CalendarEvent
         string description,
         DateTimeOffset startTime,
         DateTimeOffset endTime,
-        IEnumerable<Attendee> attendees)
+        IEnumerable<Attendee> attendees,
+        Practitioner? practitioner)
     {
         Id = id;
         Title = title;
@@ -30,6 +32,7 @@ public sealed class CalendarEvent
         EndTime = endTime;
         Version = 1;
         _attendees.AddRange(attendees);
+        Practitioner = practitioner == null ? new Practitioner() : practitioner;
     }
 
     public Guid Id { get; private set; }
@@ -48,6 +51,8 @@ public sealed class CalendarEvent
 
     public IReadOnlyCollection<Attendee> Attendees => _attendees;
 
+    public Practitioner Practitioner  { get; private set; } = new Practitioner();
+
     public static CalendarEvent Create(
         string title,
         string description,
@@ -60,7 +65,8 @@ public sealed class CalendarEvent
             description,
             startTime,
             endTime,
-            attendees?.Select(Attendee.Create));
+            attendees?.Select(Attendee.Create),
+            null);
 
         return new CalendarEvent(
             Guid.NewGuid(),
@@ -68,7 +74,8 @@ public sealed class CalendarEvent
             details.Description,
             details.StartTime,
             details.EndTime,
-            details.Attendees);
+            details.Attendees,
+            null);
     }
 
     public void Update(
@@ -76,7 +83,8 @@ public sealed class CalendarEvent
         string description,
         DateTimeOffset startTime,
         DateTimeOffset endTime,
-        IEnumerable<AttendeeUpdateDetails> attendees)
+        IEnumerable<AttendeeUpdateDetails> attendees,
+        Practitioner? practitioner)
     {
         if (IsCancelled)
         {
@@ -85,11 +93,13 @@ public sealed class CalendarEvent
 
         var existingAttendees = _attendees.ToDictionary(attendee => attendee.Id);
         var suppliedIds = new HashSet<Guid>();
+
         var replacements = attendees?.Select(replacement =>
         {
-            if (replacement is null)
-                throw new DomainValidationException("Attendees must not contain null entries.");
+            if (replacement is null) throw new DomainValidationException("Attendees must not contain null entries.");
+
             Attendee? existing = null;
+
             if (replacement.AttendeeId is Guid attendeeId)
             {
                 if (!suppliedIds.Add(attendeeId))
@@ -97,6 +107,7 @@ public sealed class CalendarEvent
                 if (!existingAttendees.TryGetValue(attendeeId, out existing))
                     throw new DomainValidationException("The attendee does not belong to this event.");
             }
+
             return Attendee.CreateReplacement(replacement, existing);
         });
 
@@ -105,7 +116,8 @@ public sealed class CalendarEvent
             description,
             startTime,
             endTime,
-            replacements);
+            replacements,
+            practitioner);
 
         // All replacements and event fields are now valid. Retain tracked instances for existing IDs.
         var reconciledAttendees = details.Attendees.Select(replacement =>
@@ -163,7 +175,8 @@ public sealed class CalendarEvent
         string description,
         DateTimeOffset startTime,
         DateTimeOffset endTime,
-        IEnumerable<Attendee>? attendees)
+        IEnumerable<Attendee>? attendees,
+        Practitioner? practitioner)
     {
         var normalizedTitle = RequiredTextValidator.ValidateAndNormalize(title, nameof(title), TitleMaxLength);
         var normalizedDescription = RequiredTextValidator.ValidateAndNormalize(
@@ -173,6 +186,7 @@ public sealed class CalendarEvent
 
         var utcStart = startTime.ToUniversalTime();
         var utcEnd = endTime.ToUniversalTime();
+
         if (utcEnd <= utcStart)
         {
             throw new DomainValidationException("End time must be later than start time.");
@@ -194,12 +208,17 @@ public sealed class CalendarEvent
             throw new DomainValidationException("Attendee email addresses must be unique.");
         }
 
+        
+        // NEED TO LOOK UP PRACTITIONER HERE / DOMAIN LAYER - OR IN UPDATE FOR PRACTITIONER.cs
+        var selectedPractitioner = practitioner == null ? new Practitioner() : practitioner;
+        
         return new ValidatedEventDetails(
             normalizedTitle,
             normalizedDescription,
             utcStart,
             utcEnd,
-            attendeeList);
+            attendeeList,
+            selectedPractitioner);
     }
 
     private sealed record ValidatedEventDetails(
@@ -207,5 +226,6 @@ public sealed class CalendarEvent
         string Description,
         DateTimeOffset StartTime,
         DateTimeOffset EndTime,
-        IReadOnlyCollection<Attendee> Attendees);
+        IReadOnlyCollection<Attendee> Attendees,
+        Practitioner practitioner);
 }

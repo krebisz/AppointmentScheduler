@@ -17,7 +17,7 @@ public sealed class ListEventsHandler(IEventRepository eventRepository)
         var to = query.To?.ToUniversalTime();
         if (from.HasValue && to.HasValue && to < from)
         {
-            throw new InvalidEventQueryException(
+            throw new InvalidQueryException(
                 "The 'to' filter must be later than or equal to the 'from' filter.");
         }
 
