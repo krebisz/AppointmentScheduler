@@ -22,16 +22,13 @@ public sealed class Practitioner
         ID = Guid.Empty;
     }
 
-    private Practitioner(string firstName, string surname)
+    public Practitioner(string firstName, string surname)
     {
-        ID = new Guid();
-        FirstName = firstName;
-        Surname = surname;
-
+        Create(firstName, surname);
     }
 
 
-    public static Practitioner Create(string firstName, string surname)
+    public Practitioner Create(string firstName, string surname)
     {
         string _firstName = RequiredTextValidator.ValidateAndNormalize(
             firstName,
@@ -42,11 +39,15 @@ public sealed class Practitioner
             nameof(surname),
             SurnameMaxLength);
 
-        return new Practitioner(_firstName, _surname);
+        ID = new Guid();
+        FirstName = _firstName;
+        Surname = _surname;
+
+        return this;
     }
 
     
-    internal Practitioner Update(PractitionerDetails practitioner)
+    public Practitioner Update(PractitionerDetails practitioner)
     {
         string _firstName = RequiredTextValidator.ValidateAndNormalize(
             practitioner.FirstName,

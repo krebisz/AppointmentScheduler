@@ -54,6 +54,22 @@ namespace AppointmentScheduler.Infrastructure.Migrations
                 table: "Attendees",
                 columns: new[] { "EventId", "EmailAddress" },
                 unique: true);
+
+            migrationBuilder.CreateTable(
+                name: "Practitioners",
+                columns: table => new
+                {
+                    Id = table.Column<Guid>(type: "TEXT", nullable: false),
+                    FirstName = table.Column<string>(type: "TEXT", maxLength: 200, nullable: false),
+                    Surname = table.Column<string>(type: "TEXT", maxLength: 200, nullable: false),
+                    EmailAddress = table.Column<string>(type: "TEXT", maxLength: 320, nullable: false),
+                    IsDeleted = table.Column<bool>(type: "INTEGER", nullable: false),
+                    Version = table.Column<long>(type: "INTEGER", nullable: false)
+                },
+                constraints: table =>
+                {
+                    table.PrimaryKey("PK_Practitioners", x => x.Id);
+                });
         }
 
         /// <inheritdoc />
@@ -64,6 +80,9 @@ namespace AppointmentScheduler.Infrastructure.Migrations
 
             migrationBuilder.DropTable(
                 name: "Events");
+            
+            migrationBuilder.DropTable(
+                name: "Practitioners");
         }
     }
 }

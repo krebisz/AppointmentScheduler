@@ -89,6 +89,34 @@ namespace AppointmentScheduler.Infrastructure.Migrations
 
                     b.Navigation("Attendees");
                 });
+
+                modelBuilder.Entity("AppointmentScheduler.Domain.Entities.Practitioner", b =>
+                {
+                    b.Property<Guid>("Id")
+                        .HasColumnType("TEXT");
+
+                    b.Property<string>("FirstName")
+                        .IsRequired()
+                        .HasMaxLength(200)
+                        .HasColumnType("TEXT");  
+                    
+                    b.Property<string>("Surname")
+                        .IsRequired()
+                        .HasMaxLength(200)
+                        .HasColumnType("TEXT");
+
+                    b.Property<bool>("IsActive")
+                        .HasColumnType("INTEGER"); 
+
+                    b.Property<long>("Version")
+                        .IsConcurrencyToken()
+                        .HasColumnType("INTEGER");
+
+                    b.HasKey("Id");
+
+                    b.ToTable("Practitioners", (string)null);
+                });
+
 #pragma warning restore 612, 618
         }
     }

@@ -8,6 +8,7 @@ public sealed class SchedulerDbContext(DbContextOptions<SchedulerDbContext> opti
     : DbContext(options)
 {
     public DbSet<CalendarEvent> Events => Set<CalendarEvent>();
+    public DbSet<Practitioner> Practitioners => Set<Practitioner>();
 
     protected override void OnModelCreating(ModelBuilder modelBuilder)
     {

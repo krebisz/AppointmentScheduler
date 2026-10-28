@@ -12,7 +12,7 @@ public sealed class CreatePractitionerHandler(IPractitionerRepository practition
     {
         ArgumentNullException.ThrowIfNull(command);
 
-        var practitionerEvent = Practitioner.Create(command.FirstName, command.Surname);
+        var practitionerEvent = new Practitioner(command.FirstName, command.Surname);
 
         var practitionerResult = await practitionerRepository.CreatePractitioner(practitionerEvent, cancellationToken);
 

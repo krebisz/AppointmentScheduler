@@ -13,7 +13,9 @@ builder.Services.AddExceptionHandler<ApiExceptionHandler>();
 builder.Services.AddOpenApi(options =>
 {
     options.AddOperationTransformer<EventOpenApiOperationTransformer>();
+    options.AddOperationTransformer<PractitionerOpenApiOperationTransformer>();
     options.AddSchemaTransformer<UpdateEventSchemaTransformer>();
+    options.AddSchemaTransformer<UpdatePractitionerSchemaTransformer>();
 });
 builder.Services.AddScoped<CreateEventHandler>();
 builder.Services.AddScoped<ListEventsHandler>();

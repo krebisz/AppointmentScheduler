@@ -18,7 +18,7 @@ public sealed class AttendeeReplacementTests
         [
             new AttendeeUpdateDetails("Renamed", "renamed@example.com", AttendeeId: retained.Id),
             new AttendeeUpdateDetails("Addition", removed.EmailAddress)
-        ]);
+        ], null);
         Assert.Same(retained, calendarEvent.Attendees.First());
         Assert.Equal("Renamed", retained.Name);
         Assert.True(retained.IsAttending);
@@ -42,7 +42,7 @@ public sealed class AttendeeReplacementTests
         [
             new AttendeeUpdateDetails("Alex", retained.EmailAddress, existingAttendance, retained.Id),
             new AttendeeUpdateDetails("Addition", "new@example.com", newAttendance)
-        ]);
+        ], null);
         Assert.Equal(expectedExisting, calendarEvent.Attendees.First().IsAttending);
         Assert.Equal(expectedNew, calendarEvent.Attendees.Last().IsAttending);
     }
@@ -72,7 +72,7 @@ public sealed class AttendeeReplacementTests
         Assert.Throws<DomainValidationException>(() => calendarEvent.Update(
             "Changed title", "Changed description", calendarEvent.StartTime,
             invalid == "invalidRange" ? calendarEvent.StartTime : calendarEvent.EndTime,
-            [first, second]));
+            [first, second], null));
         Assert.Equal(before, JsonSerializer.Serialize(calendarEvent));
         Assert.Same(originals[0], calendarEvent.Attendees.First());
         Assert.Same(originals[1], calendarEvent.Attendees.Last());

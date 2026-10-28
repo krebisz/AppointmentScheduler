@@ -33,9 +33,9 @@ public sealed class EfEventRepositoryReconciliationTests
         var first = (await firstRepository.GetByIdAsync(eventId, CancellationToken.None))!;
         var second = (await secondRepository.GetByIdAsync(eventId, CancellationToken.None))!;
         first.Update("First writer", "Test", first.StartTime, first.EndTime,
-            [new AttendeeUpdateDetails("Alex", "first@example.com", AttendeeId: first.Attendees.Single().Id)]);
+            [new AttendeeUpdateDetails("Alex", "first@example.com", AttendeeId: first.Attendees.Single().Id)], null);
         second.Update("Second writer", "Test", second.StartTime, second.EndTime,
-            [new AttendeeUpdateDetails("Alex", "second@example.com", AttendeeId: second.Attendees.Single().Id)]);
+            [new AttendeeUpdateDetails("Alex", "second@example.com", AttendeeId: second.Attendees.Single().Id)], null);
         await firstRepository.SaveChangesAsync(CancellationToken.None);
         await Assert.ThrowsAsync<EventConcurrencyException>(() => secondRepository.SaveChangesAsync(CancellationToken.None));
         await using var verification = new SchedulerDbContext(options);

@@ -16,6 +16,7 @@ public static class InfrastructureServiceCollectionExtensions
         services.AddDbContext<SchedulerDbContext>(
             options => options.UseSqlite(connectionString));
         services.AddScoped<IEventRepository, EfEventRepository>();
+        services.AddScoped<IPractitionerRepository, EfPractitionerRepository>();
         services.AddScoped<IEventNotificationPublisher, LoggingEventNotificationPublisher>();
 
         return services;

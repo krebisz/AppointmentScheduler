@@ -39,7 +39,8 @@ public sealed class UpdateEventHandler(
                 attendee.Name,
                 attendee.EmailAddress,
                 attendee.IsAttending,
-                attendee.AttendeeId)));
+                attendee.AttendeeId)),
+            null);
 
         await eventRepository.SaveChangesAsync(cancellationToken);
         await eventNotificationPublisher.PublishAsync(
@@ -59,6 +60,7 @@ public sealed class UpdateEventHandler(
                     attendee.Name,
                     attendee.EmailAddress,
                     attendee.IsAttending))
-                .ToArray());
+                .ToArray(),
+            null);
     }
 }

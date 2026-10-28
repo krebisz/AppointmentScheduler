@@ -19,4 +19,5 @@ public sealed record UpdateEventRequest(
     DateTimeOffset EndTime,
     [param: Required]
     [param: MinLength(1)]
-    IReadOnlyCollection<UpdateAttendeeRequest> Attendees);
+    IReadOnlyCollection<UpdateAttendeeRequest> Attendees,
+    object? Practitioner);

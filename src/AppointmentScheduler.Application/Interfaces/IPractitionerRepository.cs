@@ -9,7 +9,7 @@ public interface IPractitionerRepository
     Task<Practitioner?> GetByIdAsync(Guid Id, CancellationToken cancellationToken);
 
 
-    Task<Practitioner> CreatePractitioner(string FirstName, string Surname, CancellationToken cancellationToken);
+    Task CreatePractitioner(string FirstName, string Surname, CancellationToken cancellationToken);
 
     Task<CreatePractitionerResult> CreatePractitioner(Practitioner practitioner, CancellationToken cancellationToken);
 
